@@ -52,7 +52,7 @@ The API starts on port `8080`. Check `http://localhost:8080/api/health`; it shou
 
 ### Gemini flashcard suggestions
 
-The card form asks the backend for suggestions when you leave the English word field. You can also request them with **Generate with AI**. Suggestions fill only blank translation, example, and mnemonic fields, so text you have already entered is preserved. The app uses the Gemini `gemini-3.8-flash` model by default and sends requests from Spring Boot; the browser never receives the API key.
+The card form asks the backend for suggestions when you leave the English word field. You can also request them with **Generate with AI**. Suggestions fill only blank translation, example, and mnemonic fields, so text you have already entered is preserved. The app uses the Gemini `gemini-2.5-flash` model by default and sends requests from Spring Boot; the browser never receives the API key.
 
 Set `GEMINI_API_KEY` in the IntelliJ run configuration environment variables for `YuiApiApplication`. Optionally set `GEMINI_MODEL` to another model available to your Google AI Studio project. For PowerShell, set the variable in the current session before starting Maven: `$env:GEMINI_API_KEY = 'your-new-key'`. Do not commit local credentials. The API key that was pasted into the chat should be revoked and replaced before use.
 

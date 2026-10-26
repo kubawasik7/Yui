@@ -33,7 +33,7 @@ public class FlashcardSuggestionService {
 
     public FlashcardSuggestionService(ObjectMapper objectMapper,
             @Value("${yui.ai.gemini.api-key:}") String apiKey,
-            @Value("${yui.ai.gemini.model:gemini-3.8-flash}") String model) {
+            @Value("${yui.ai.gemini.model:gemini-2.5-flash}") String model) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(5));
         requestFactory.setReadTimeout(Duration.ofSeconds(25));
@@ -52,9 +52,8 @@ public class FlashcardSuggestionService {
         Map<String, Object> request = Map.of(
                 "contents", List.of(Map.of("parts", List.of(Map.of("text", promptFor(rawWord.trim()))))),
                 "generationConfig", Map.of(
-                        "responseFormat", Map.of("text", Map.of(
-                                "mimeType", "APPLICATION_JSON",
-                                "schema", responseSchema())),
+                        "responseMimeType", "application/json",
+                        "responseSchema", responseSchema(),
                         "temperature", 0.3,
                         "maxOutputTokens", 500));
 
