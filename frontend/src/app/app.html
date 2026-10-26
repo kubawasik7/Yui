@@ -1,7 +1,7 @@
 <div class="app-shell">
   <aside class="sidebar" aria-label="Main navigation">
     <a class="brand" href="/" aria-label="Yui home">
-      <span class="brand-mark" aria-hidden="true">y</span>
+      <span class="brand-mark" aria-hidden="true">結</span>
       <span>Yui</span>
     </a>
 
@@ -14,10 +14,10 @@
         <span class="nav-icon" aria-hidden="true">▤</span>My decks
         <span class="nav-count">{{ decks.length }}</span>
       </button>
-      <span class="nav-item muted" aria-disabled="true">
+      <button class="nav-item" [class.active]="studyMode" type="button" [disabled]="!decks.length" (click)="startFirstStudy()">
         <span class="nav-icon" aria-hidden="true">✳</span>Study
-        <span class="nav-count">soon</span>
-      </span>
+        <span class="nav-count">{{ decks.length ? '↗' : '—' }}</span>
+      </button>
     </nav>
 
     <div class="sidebar-bottom">
@@ -57,7 +57,35 @@
         </div>
       }
 
-      @if (selectedDeck; as deck) {
+      @if (studyMode) {
+        <section class="study-heading">
+          <div>
+            <button class="back-link" type="button" (click)="endStudy()">← Exit study</button>
+            <p class="eyebrow">FOCUS SESSION</p>
+            <h1 class="detail-title">{{ studyDeckName }}</h1>
+            <p class="detail-description">One card at a time. Take it at your own pace.</p>
+          </div>
+          <span class="study-counter">{{ studyCards.length ? studyIndex + 1 : 0 }} <span>/</span> {{ studyCards.length }}</span>
+        </section>
+        @if (currentStudyCard; as studyCard) {
+          <section class="study-stage" aria-label="Flashcard study">
+            <button class="study-flashcard" type="button" [class.is-flipped]="studyFlipped" (click)="flipStudyCard()" [attr.aria-label]="studyFlipped ? 'Show card front' : 'Flip card to reveal answer'">
+              <span class="study-face study-front"><span class="study-face-label">PROMPT <span>結</span></span><strong>{{ studyCard.front }}</strong><small>Click or press space to reveal</small></span>
+              <span class="study-face study-back"><span class="study-face-label">ANSWER <span>YUI</span></span><strong>{{ studyCard.back }}</strong>
+                @if (studyCard.example) { <small class="study-example">“{{ studyCard.example }}”</small> }
+                @if (studyCard.mnemonic) { <small class="study-mnemonic">✳ {{ studyCard.mnemonic }}</small> }
+              </span>
+            </button>
+            <div class="study-controls">
+              <span><kbd>Space</kbd> flip the card</span>
+              <button class="primary-button" type="button" (click)="nextStudyCard()">Next card <span aria-hidden="true">→</span></button>
+            </div>
+            <p class="study-note">Your study history and streak will appear here once review tracking is enabled.</p>
+          </section>
+        } @else {
+          <section class="inline-empty"><span class="inline-empty-icon" aria-hidden="true">▤</span><h3>This deck has no cards yet</h3><p>Add your first card to start a study session.</p><button class="secondary-button" type="button" (click)="endStudy()">Back to deck</button></section>
+        }
+      } @else if (selectedDeck; as deck) {
         <section class="deck-detail-heading">
           <div>
             <button class="back-link" type="button" (click)="showOverview()">← All decks</button>
@@ -118,7 +146,7 @@
       } @else {
         <section class="welcome">
           <div>
-            <p class="eyebrow">YOUR LANGUAGE JOURNAL</p>
+            <p class="eyebrow">YUI · YOUR LANGUAGE JOURNAL</p>
             <h1>Small steps,<br /><span>stronger words.</span></h1>
             <p class="welcome-copy">A little practice today makes a lasting difference tomorrow.</p>
           </div>
@@ -126,8 +154,14 @@
             <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
             <div class="word-card card-back">bright <span>adjective</span></div>
             <div class="word-card card-front">serendipity <span>/ˌser.ənˈdɪp.ə.ti/</span><i>the joy of finding something unexpected</i></div>
-            <span class="art-sparkle sparkle-one">✳</span><span class="art-sparkle sparkle-two">✦</span>
+            <span class="art-kanji" aria-hidden="true">結</span><span class="art-sparkle sparkle-one">✳</span><span class="art-sparkle sparkle-two">✦</span>
           </div>
+        </section>
+
+        <section class="streak-panel" aria-label="Study streak">
+          <div class="streak-icon" aria-hidden="true">火</div>
+          <div class="streak-copy"><p class="eyebrow">YOUR RHYTHM</p><strong>0 day streak</strong><span>Start your first study session today.</span></div>
+          <span class="streak-status">READY WHEN YOU ARE</span>
         </section>
 
         <section class="section-heading">
@@ -142,13 +176,16 @@
             @for (deckItem of decks; track deckItem.id) {
               <article class="deck-tile">
                 <button class="deck-open" type="button" (click)="openDeck(deckItem)">
-                  <span class="deck-symbol" aria-hidden="true">▤</span>
+                  <span class="deck-symbol" aria-hidden="true">結</span>
                   <span class="deck-card-count">{{ deckItem.cardCount }} {{ deckItem.cardCount === 1 ? 'card' : 'cards' }}</span>
                   <strong>{{ deckItem.name }}</strong>
                   <span class="deck-description">{{ deckItem.description || 'A little space for new words.' }}</span>
-                  <span class="deck-open-link">Open deck <span aria-hidden="true">→</span></span>
+                  <span class="deck-progress-label"><span>Mastered</span><span>0%</span></span>
+                  <span class="deck-progress"><span></span></span>
                 </button>
+                <div class="deck-metrics"><span><i class="metric-new"></i>New <strong>{{ deckItem.cardCount }}</strong></span><span><i class="metric-review"></i>Review <strong>0</strong></span></div>
                 <div class="deck-actions">
+                  <button class="study-button" type="button" [disabled]="deckItem.cardCount === 0" (click)="startStudy(deckItem, $event)">Study <span aria-hidden="true">→</span></button>
                   <button type="button" (click)="editDeck(deckItem, $event)">Edit</button>
                   <button class="delete-action" type="button" (click)="deleteDeck(deckItem, $event)">Delete</button>
                 </div>
@@ -171,7 +208,7 @@
         }
       }
 
-      <footer class="page-footer"><span>Made for curious minds.</span><span>One word at a time <span class="footer-star">✳</span></span></footer>
+      <footer class="page-footer"><span>Yui <span class="footer-kanji">結</span> · Made for curious minds.</span><span>One word at a time <span class="footer-star">✳</span></span></footer>
     </div>
   </main>
 </div>

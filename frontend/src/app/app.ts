@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, HostListener, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   Deck,
@@ -12,8 +12,7 @@ import {
 @Component({
   selector: 'app-root',
   imports: [CommonModule, FormsModule],
-  templateUrl: './app.html',
-  styleUrls: ['./app.scss', './app-features.scss', './app-dialogs.scss']
+  templateUrl: './app.html'
 })
 export class App implements OnInit {
   private readonly api = inject(FlashcardApiService);
@@ -27,6 +26,11 @@ export class App implements OnInit {
   loadError = '';
   notice = '';
   searchQuery = '';
+  studyMode = false;
+  studyCards: Flashcard[] = [];
+  studyIndex = 0;
+  studyFlipped = false;
+  studyDeckName = '';
 
   deckFormOpen = false;
   editingDeckId: string | null = null;
@@ -43,6 +47,59 @@ export class App implements OnInit {
 
   get totalCards(): number {
     return this.decks.reduce((total, deck) => total + deck.cardCount, 0);
+  }
+
+  get currentStudyCard(): Flashcard | null {
+    return this.studyCards[this.studyIndex] ?? null;
+  }
+
+  startStudy(deck: Deck, event?: Event): void {
+    event?.stopPropagation();
+    this.selectedDeck = deck;
+    this.studyDeckName = deck.name;
+    this.searchQuery = '';
+    this.loadingCards = true;
+    this.loadError = '';
+    this.api.getCards(deck.id, '').subscribe({
+      next: (cards) => {
+        this.cards = cards;
+        this.studyCards = cards;
+        this.studyIndex = 0;
+        this.studyFlipped = false;
+        this.studyMode = true;
+        this.loadingCards = false;
+      },
+      error: (error: unknown) => {
+        this.loadError = this.errorMessage(error, 'Cards could not be loaded.');
+        this.loadingCards = false;
+      }
+    });
+  }
+
+  endStudy(): void {
+    this.studyMode = false;
+    this.studyCards = [];
+    this.studyIndex = 0;
+    this.studyFlipped = false;
+  }
+
+  flipStudyCard(): void {
+    if (this.currentStudyCard) this.studyFlipped = !this.studyFlipped;
+  }
+
+  nextStudyCard(): void {
+    if (!this.studyCards.length) return;
+    this.studyIndex = (this.studyIndex + 1) % this.studyCards.length;
+    this.studyFlipped = false;
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  onStudyKeydown(event: KeyboardEvent): void {
+    if (!this.studyMode || event.code !== 'Space' || event.repeat) return;
+    const target = event.target;
+    if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(target.tagName))) return;
+    event.preventDefault();
+    this.flipStudyCard();
   }
 
   loadDecks(): void {
@@ -70,9 +127,15 @@ export class App implements OnInit {
   }
 
   showOverview(): void {
+    this.endStudy();
     this.selectedDeck = null;
     this.cards = [];
     this.loadError = '';
+  }
+
+  startFirstStudy(): void {
+    const deck = this.decks.find((item) => item.cardCount > 0);
+    if (deck) this.startStudy(deck);
   }
 
   loadCards(): void {
