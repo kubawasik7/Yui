@@ -51,6 +51,9 @@ public class FlashcardSuggestionService {
         if (normalized.startsWith("models/")) {
             normalized = normalized.substring("models/".length());
         }
+        if (normalized.endsWith(":generateContent")) {
+            normalized = normalized.substring(0, normalized.length() - ":generateContent".length());
+        }
         return normalized.isBlank() ? "gemini-2.5-flash" : normalized;
     }
 
@@ -79,7 +82,7 @@ public class FlashcardSuggestionService {
         } catch (RestClientResponseException exception) {
             int status = exception.getStatusCode().value();
             log.warn("Gemini API request failed with HTTP status {}", status);
-            throw new FlashcardSuggestionException(BAD_GATEWAY, providerErrorMessage(status));
+            throw new FlashcardSuggestionException(BAD_GATEWAY, providerErrorMessage(status, exception));
         } catch (RestClientException exception) {
             log.warn("Gemini API request failed before receiving an HTTP response ({})",
                     exception.getClass().getSimpleName());
@@ -88,13 +91,15 @@ public class FlashcardSuggestionService {
         }
     }
 
-    private String providerErrorMessage(int status) {
+    private String providerErrorMessage(int status, RestClientResponseException exception) {
         if (status == 401 || status == 403) {
             return "Gemini rejected the API key or the key does not have access to this model. Check GEMINI_API_KEY.";
         }
         if (status == 404) {
-            return "Gemini returned 404 for the configured model. Set GEMINI_MODEL to gemini-2.5-flash "
-                    + "without a 'models/' prefix, then fully restart the backend.";
+            String providerMessage = safeProviderMessage(exception.getResponseBodyAsString());
+            return "Gemini returned 404. Set GEMINI_MODEL exactly to gemini-2.5-flash "
+                    + "without 'models/' or ':generateContent', then fully restart."
+                    + (providerMessage == null ? "" : " Google detail: " + providerMessage);
         }
         if (status == 429) {
             return "Gemini request quota or rate limit was reached. Check the Google AI Studio project quota.";
@@ -103,6 +108,19 @@ public class FlashcardSuggestionService {
             return "Gemini is temporarily unavailable. Try again later.";
         }
         return "Gemini rejected the request with HTTP status " + status + ". Check the backend configuration.";
+    }
+
+    private String safeProviderMessage(String responseBody) {
+        try {
+            JsonNode message = objectMapper.readTree(responseBody).at("/error/message");
+            if (!message.isTextual() || message.asText().isBlank()) {
+                return null;
+            }
+            String sanitized = message.asText().replaceAll("[\\r\\n\\t]+", " ").trim();
+            return sanitized.length() > 240 ? sanitized.substring(0, 240) : sanitized;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private FlashcardSuggestionResponse parseResponse(JsonNode response) {
