@@ -7,6 +7,7 @@ export interface Deck {
   name: string;
   description: string | null;
   cardCount: number;
+  desiredRetention: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -14,6 +15,7 @@ export interface Deck {
 export interface DeckInput {
   name: string;
   description: string | null;
+  desiredRetention: number;
 }
 
 export interface Flashcard {
@@ -24,6 +26,13 @@ export interface Flashcard {
   example: string | null;
   mnemonic: string | null;
   notes: string | null;
+  state: 'LEARNING' | 'REVIEW' | 'RELEARNING';
+  stability: number | null;
+  difficulty: number | null;
+  dueAt: string;
+  lastReviewAt: string | null;
+  reviewCount: number;
+  lapseCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,6 +43,21 @@ export interface FlashcardInput {
   example: string | null;
   mnemonic: string | null;
   notes: string | null;
+}
+
+export type ReviewAnswer = 'REMEMBERED' | 'NOT_REMEMBERED';
+
+export interface ReviewInput {
+  submissionId: string;
+  answer: ReviewAnswer;
+}
+
+export interface ReviewResult {
+  submissionId: string;
+  cardId: string;
+  rating: 'AGAIN' | 'HARD' | 'GOOD' | 'EASY';
+  reviewedAt: string;
+  dueAt: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -57,12 +81,17 @@ export class FlashcardApiService {
     return this.http.delete<void>(`${this.baseUrl}/decks/${id}`);
   }
 
-  getCards(deckId: string, query = ''): Observable<Flashcard[]> {
+  getCards(deckId: string, query = '', dueOnly = false): Observable<Flashcard[]> {
     let params = new HttpParams();
     if (query.trim()) {
       params = params.set('query', query.trim());
     }
+    if (dueOnly) params = params.set('dueOnly', 'true');
     return this.http.get<Flashcard[]>(`${this.baseUrl}/decks/${deckId}/cards`, { params });
+  }
+
+  submitReview(deckId: string, cardId: string, input: ReviewInput): Observable<ReviewResult> {
+    return this.http.post<ReviewResult>(`${this.baseUrl}/decks/${deckId}/cards/${cardId}/reviews`, input);
   }
 
   createCard(deckId: string, input: FlashcardInput): Observable<Flashcard> {

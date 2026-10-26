@@ -24,6 +24,9 @@ public class Deck {
     @Column(length = 500)
     private String description;
 
+    @Column(name = "desired_retention", nullable = false)
+    private double desiredRetention = 0.9;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -34,8 +37,13 @@ public class Deck {
     }
 
     public Deck(String name, String description) {
+        this(name, description, 0.9);
+    }
+
+    public Deck(String name, String description, double desiredRetention) {
         this.name = name;
         this.description = description;
+        this.desiredRetention = desiredRetention;
     }
 
     @PrePersist
@@ -51,9 +59,10 @@ public class Deck {
         updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
-    public void update(String name, String description) {
+    public void update(String name, String description, double desiredRetention) {
         this.name = name;
         this.description = description;
+        this.desiredRetention = desiredRetention;
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
@@ -68,6 +77,8 @@ public class Deck {
     public String getDescription() {
         return description;
     }
+
+    public double getDesiredRetention() { return desiredRetention; }
 
     public OffsetDateTime getCreatedAt() {
         return createdAt;

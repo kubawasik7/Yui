@@ -1,6 +1,7 @@
 package com.wordstead.api.cards;
 
 import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 public record CardResponse(
@@ -11,6 +12,13 @@ public record CardResponse(
         String example,
         String mnemonic,
         String notes,
+        FsrsState state,
+        Double stability,
+        Double difficulty,
+        Instant dueAt,
+        Instant lastReviewAt,
+        int reviewCount,
+        int lapseCount,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt) {
 
@@ -23,6 +31,13 @@ public record CardResponse(
                 card.getExample(),
                 card.getMnemonic(),
                 card.getNotes(),
+                card.getFsrsState(),
+                card.getStability(),
+                card.getDifficulty(),
+                card.getDueAt(),
+                card.getLastReviewAt(),
+                card.getReviewCount(),
+                card.getLapseCount(),
                 card.getCreatedAt(),
                 card.getUpdatedAt());
     }

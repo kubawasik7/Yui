@@ -37,13 +37,15 @@ public class DeckService {
     }
 
     public DeckResponse create(DeckRequest request) {
-        Deck deck = new Deck(normalizeName(request.name()), normalizeDescription(request.description()));
+        Deck deck = new Deck(normalizeName(request.name()), normalizeDescription(request.description()),
+                request.desiredRetention() == null ? 0.9 : request.desiredRetention());
         return DeckResponse.from(deckRepository.save(deck), 0);
     }
 
     public DeckResponse update(UUID id, DeckRequest request) {
         Deck deck = findDeck(id);
-        deck.update(normalizeName(request.name()), normalizeDescription(request.description()));
+        deck.update(normalizeName(request.name()), normalizeDescription(request.description()),
+                request.desiredRetention() == null ? deck.getDesiredRetention() : request.desiredRetention());
         return DeckResponse.from(deckRepository.save(deck), cardRepository.countByDeckId(id));
     }
 

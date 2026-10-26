@@ -21,15 +21,20 @@ import org.springframework.web.bind.annotation.RestController;
 public class CardController {
 
     private final CardService cardService;
+    private final ReviewService reviewService;
 
-    public CardController(CardService cardService) {
+    public CardController(CardService cardService, ReviewService reviewService) {
         this.cardService = cardService;
+        this.reviewService = reviewService;
     }
 
     @GetMapping
     public List<CardResponse> findAll(
             @PathVariable UUID deckId,
-            @RequestParam(required = false) String query) {
+            @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "false") boolean dueOnly,
+            @RequestParam(defaultValue = "100") int limit) {
+        if (dueOnly) return reviewService.findDueCards(deckId, limit);
         return cardService.findAll(deckId, query);
     }
 

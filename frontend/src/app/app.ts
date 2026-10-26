@@ -7,7 +7,8 @@ import {
   Deck,
   Flashcard,
   FlashcardApiService,
-  FlashcardInput
+  FlashcardInput,
+  ReviewAnswer
 } from './flashcard-api.service';
 
 @Component({
@@ -34,11 +35,15 @@ export class App implements OnInit {
   studyIndex = 0;
   studyFlipped = false;
   studyDeckName = '';
+  reviewSaving = false;
+  reviewError = '';
+  pendingReview: { cardId: string; submissionId: string; answer: ReviewAnswer } | null = null;
 
   deckFormOpen = false;
   editingDeckId: string | null = null;
   deckName = '';
   deckDescription = '';
+  desiredRetention = 0.9;
 
   cardFormOpen = false;
   editingCardId: string | null = null;
@@ -71,9 +76,8 @@ export class App implements OnInit {
     this.searchQuery = '';
     this.loadingCards = true;
     this.loadError = '';
-    this.api.getCards(deck.id, '').subscribe({
+    this.api.getCards(deck.id, '', true).subscribe({
       next: (cards) => {
-        this.cards = cards;
         this.studyCards = cards;
         this.studyIndex = 0;
         this.studyFlipped = false;
@@ -90,22 +94,75 @@ export class App implements OnInit {
     });
   }
 
-  endStudy(): void {
+  endStudy(reloadDeck = true): void {
     this.studyMode = false;
     this.activeSection = 'decks';
     this.studyCards = [];
     this.studyIndex = 0;
     this.studyFlipped = false;
+    this.reviewError = '';
+    this.pendingReview = null;
+    this.reviewSaving = false;
+    if (reloadDeck && this.selectedDeck) this.loadCards();
   }
 
   flipStudyCard(): void {
     if (this.currentStudyCard) this.studyFlipped = !this.studyFlipped;
   }
 
-  nextStudyCard(): void {
-    if (!this.studyCards.length) return;
-    this.studyIndex = (this.studyIndex + 1) % this.studyCards.length;
+  rateStudyCard(answer: ReviewAnswer): void {
+    const card = this.currentStudyCard;
+    if (!this.selectedDeck || !card || !this.studyFlipped || this.reviewSaving) return;
+    if (!this.pendingReview) {
+      this.pendingReview = { cardId: card.id, submissionId: crypto.randomUUID(), answer };
+    }
+    if (this.pendingReview.cardId !== card.id) return;
+
+    const pending = this.pendingReview;
+    this.reviewSaving = true;
+    this.reviewError = '';
+    this.api.submitReview(this.selectedDeck.id, card.id, {
+      submissionId: pending.submissionId,
+      answer: pending.answer
+    }).subscribe({
+      next: () => {
+        this.pendingReview = null;
+        this.reviewSaving = false;
+        this.loadDueStudyCards();
+        this.changeDetector.markForCheck();
+      },
+      error: (error: unknown) => {
+        this.reviewSaving = false;
+        this.reviewError = this.errorMessage(error, 'Your review could not be saved. Retry to safely submit it.');
+        this.changeDetector.markForCheck();
+      }
+    });
+  }
+
+  retryStudyReview(): void {
+    if (this.pendingReview) this.rateStudyCard(this.pendingReview.answer);
+  }
+
+  private loadDueStudyCards(): void {
+    if (!this.selectedDeck) return;
+    this.studyCards = [];
+    this.studyIndex = 0;
     this.studyFlipped = false;
+    this.loadingCards = true;
+    this.api.getCards(this.selectedDeck.id, '', true).subscribe({
+      next: (cards) => {
+        this.studyCards = cards;
+        this.studyIndex = 0;
+        this.studyFlipped = false;
+        this.loadingCards = false;
+        this.changeDetector.markForCheck();
+      },
+      error: (error: unknown) => {
+        this.reviewError = this.errorMessage(error, 'The next due cards could not be loaded.');
+        this.loadingCards = false;
+        this.changeDetector.markForCheck();
+      }
+    });
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -149,7 +206,7 @@ export class App implements OnInit {
   }
 
   showOverview(): void {
-    this.endStudy();
+    this.endStudy(false);
     this.activeSection = 'overview';
     this.selectedDeck = null;
     this.cards = [];
@@ -157,7 +214,7 @@ export class App implements OnInit {
   }
 
   showDecks(): void {
-    this.endStudy();
+    this.endStudy(false);
     this.activeSection = 'decks';
     this.selectedDeck = null;
     this.cards = [];
@@ -193,6 +250,7 @@ export class App implements OnInit {
     this.editingDeckId = null;
     this.deckName = '';
     this.deckDescription = '';
+    this.desiredRetention = 0.9;
     this.deckFormOpen = true;
     this.notice = '';
     this.loadError = '';
@@ -203,6 +261,7 @@ export class App implements OnInit {
     this.editingDeckId = deck.id;
     this.deckName = deck.name;
     this.deckDescription = deck.description ?? '';
+    this.desiredRetention = deck.desiredRetention ?? 0.9;
     this.deckFormOpen = true;
     this.notice = '';
     this.loadError = '';
@@ -211,7 +270,7 @@ export class App implements OnInit {
   saveDeck(): void {
     const name = this.deckName.trim();
     if (!name || this.saving) return;
-    const input = { name, description: this.deckDescription.trim() || null };
+    const input = { name, description: this.deckDescription.trim() || null, desiredRetention: this.desiredRetention };
     const request = this.editingDeckId
       ? this.api.updateDeck(this.editingDeckId, input)
       : this.api.createDeck(input);

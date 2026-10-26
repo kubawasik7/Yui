@@ -4,6 +4,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -34,6 +37,9 @@ class CardControllerTest {
 
     @Autowired
     private CardRepository cardRepository;
+
+    @Autowired
+    private CardReviewRepository reviewRepository;
 
     @BeforeEach
     void clearCardsAndDecks() {
@@ -84,6 +90,100 @@ class CardControllerTest {
 
         assertEquals(400, response.statusCode());
         assertEquals(0, cardRepository.count());
+    }
+
+    @Test
+    void reviewIsPersistedIdempotentlyAndRemovesCardFromDueQueue() throws Exception {
+        UUID deckId = deckRepository.save(new Deck("Travel", null)).getId();
+        String cardsPath = "/api/decks/" + deckId + "/cards";
+        HttpResponse<String> created = request("POST", cardsPath,
+                "{\"front\":\"board\",\"back\":\"wsiadać\"}");
+        UUID cardId = extractId(created.body());
+
+        HttpResponse<String> dueBefore = request("GET", cardsPath + "?dueOnly=true", null);
+        assertTrue(dueBefore.body().contains(cardId.toString()));
+
+        String submissionId = UUID.randomUUID().toString();
+        String reviewPath = cardsPath + "/" + cardId + "/reviews";
+        String body = "{\"submissionId\":\"" + submissionId + "\",\"answer\":\"REMEMBERED\"}";
+        HttpResponse<String> firstReview = request("POST", reviewPath, body);
+        assertEquals(200, firstReview.statusCode());
+        assertTrue(firstReview.body().contains("\"rating\":\"GOOD\""));
+        Instant reviewedAt = extractInstant(firstReview.body(), "reviewedAt");
+        Instant expectedDueAt = LocalDate.from(reviewedAt.atZone(ReviewDueDatePolicy.SCHEDULING_ZONE))
+                .plusDays(1).atStartOfDay(ReviewDueDatePolicy.SCHEDULING_ZONE).toInstant();
+        assertEquals(expectedDueAt, extractInstant(firstReview.body(), "dueAt"));
+        assertEquals(1, reviewRepository.count());
+
+        HttpResponse<String> repeatedRequest = request("POST", reviewPath, body);
+        assertEquals(200, repeatedRequest.statusCode());
+        assertEquals(firstReview.body(), repeatedRequest.body());
+        assertEquals(1, reviewRepository.count());
+
+        HttpResponse<String> reusedKeyWithDifferentAnswer = request("POST", reviewPath,
+                "{\"submissionId\":\"" + submissionId + "\",\"answer\":\"NOT_REMEMBERED\"}");
+        assertEquals(409, reusedKeyWithDifferentAnswer.statusCode());
+        assertEquals(1, reviewRepository.count());
+
+        HttpResponse<String> updatedCard = request("GET", cardsPath + "/" + cardId, null);
+        assertTrue(updatedCard.body().contains("\"reviewCount\":1"));
+        assertTrue(updatedCard.body().contains("\"state\":\"REVIEW\""));
+        assertTrue(updatedCard.body().contains("\"lastReviewAt\":"));
+        HttpResponse<String> dueAfter = request("GET", cardsPath + "?dueOnly=true", null);
+        assertTrue(!dueAfter.body().contains(cardId.toString()));
+        CardReview savedReview = reviewRepository.findBySubmissionId(UUID.fromString(submissionId)).orElseThrow();
+        assertEquals(ReviewRating.GOOD, savedReview.getRating());
+        assertEquals(extractInstant(firstReview.body(), "dueAt"), savedReview.getDueAt());
+    }
+
+    @Test
+    void notRememberedMapsToAgainAndSchedulesRelearningLapse() throws Exception {
+        UUID deckId = deckRepository.save(new Deck("Vocabulary", null)).getId();
+        String cardsPath = "/api/decks/" + deckId + "/cards";
+        UUID cardId = extractId(request("POST", cardsPath,
+                "{\"front\":\"忘れる\",\"back\":\"forget\"}").body());
+        UUID otherDueCardId = extractId(request("POST", cardsPath,
+                "{\"front\":\"覚える\",\"back\":\"remember\"}").body());
+        Instant previousReview = Instant.now().minus(Duration.ofDays(1));
+        Flashcard card = cardRepository.findById(cardId).orElseThrow();
+        card.applySchedule(FsrsState.REVIEW, null, 2.3065, 2.1181,
+                previousReview, previousReview, false);
+        cardRepository.saveAndFlush(card);
+        String submissionId = UUID.randomUUID().toString();
+
+        HttpResponse<String> response = request("POST", cardsPath + "/" + cardId + "/reviews",
+                "{\"submissionId\":\"" + submissionId + "\",\"answer\":\"NOT_REMEMBERED\"}");
+
+        assertEquals(200, response.statusCode());
+        assertTrue(response.body().contains("\"rating\":\"AGAIN\""));
+        Instant reviewedAt = extractInstant(response.body(), "reviewedAt");
+        Instant dueAt = extractInstant(response.body(), "dueAt");
+        assertEquals(Duration.ofMinutes(10), Duration.between(reviewedAt, dueAt));
+        assertEquals(ReviewRating.AGAIN, reviewRepository.findBySubmissionId(UUID.fromString(submissionId))
+                .orElseThrow().getRating());
+
+        HttpResponse<String> updatedCard = request("GET", cardsPath + "/" + cardId, null);
+        assertTrue(updatedCard.body().contains("\"state\":\"RELEARNING\""));
+        assertTrue(updatedCard.body().contains("\"reviewCount\":2"));
+        assertTrue(updatedCard.body().contains("\"lapseCount\":1"));
+
+        HttpResponse<String> dueQueue = request("GET", cardsPath + "?dueOnly=true", null);
+        assertTrue(dueQueue.body().contains(cardId.toString()), "A forgotten card should be immediately queued again");
+        assertTrue(dueQueue.body().contains(otherDueCardId.toString()));
+        assertTrue(dueQueue.body().indexOf(otherDueCardId.toString()) < dueQueue.body().indexOf(cardId.toString()),
+                "Other due cards should be shown before the forgotten card");
+
+        String repeatSubmissionId = UUID.randomUUID().toString();
+        HttpResponse<String> immediateRepeat = request("POST", cardsPath + "/" + cardId + "/reviews",
+                "{\"submissionId\":\"" + repeatSubmissionId + "\",\"answer\":\"NOT_REMEMBERED\"}");
+        assertEquals(200, immediateRepeat.statusCode(), "A queued forgotten card may be reviewed before its FSRS due time");
+        assertTrue(immediateRepeat.body().contains("\"rating\":\"AGAIN\""));
+    }
+
+    private Instant extractInstant(String json, String field) {
+        Matcher matcher = Pattern.compile("\\\"" + field + "\\\":\\\"([^\\\"]+)\\\"").matcher(json);
+        if (!matcher.find()) throw new AssertionError("Missing timestamp field: " + field);
+        return Instant.parse(matcher.group(1));
     }
 
     private HttpResponse<String> request(String method, String path, String jsonBody) throws Exception {

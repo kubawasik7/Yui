@@ -8,6 +8,7 @@ public record DeckResponse(
         String name,
         String description,
         long cardCount,
+        double desiredRetention,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt) {
 
@@ -17,6 +18,7 @@ public record DeckResponse(
                 deck.getName(),
                 deck.getDescription(),
                 cardCount,
+                deck.getDesiredRetention(),
                 deck.getCreatedAt(),
                 deck.getUpdatedAt());
     }

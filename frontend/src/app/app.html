@@ -63,11 +63,13 @@
             <button class="back-link" type="button" (click)="endStudy()">← Exit study</button>
             <p class="eyebrow">FOCUS SESSION</p>
             <h1 class="detail-title">{{ studyDeckName }}</h1>
-            <p class="detail-description">One card at a time. Take it at your own pace.</p>
+            <p class="detail-description">Review due cards and choose whether you remembered each one.</p>
           </div>
           <span class="study-counter">{{ studyCards.length ? studyIndex + 1 : 0 }} <span>/</span> {{ studyCards.length }}</span>
         </section>
-        @if (currentStudyCard; as studyCard) {
+        @if (loadingCards) {
+          <div class="loading-state" role="status">Loading cards due for review…</div>
+        } @else if (currentStudyCard; as studyCard) {
           <section class="study-stage" aria-label="Flashcard study">
             <button class="study-flashcard" type="button" [class.is-flipped]="studyFlipped" (click)="flipStudyCard()" [attr.aria-label]="studyFlipped ? 'Show card front' : 'Flip card to reveal answer'">
               <span class="study-face study-front"><span class="study-face-label">PROMPT <span>結</span></span><strong>{{ studyCard.front }}</strong><small>Click or press space to reveal</small></span>
@@ -78,12 +80,20 @@
             </button>
             <div class="study-controls">
               <span><kbd>Space</kbd> flip the card</span>
-              <button class="primary-button" type="button" (click)="nextStudyCard()">Next card <span aria-hidden="true">→</span></button>
             </div>
-            <p class="study-note">Your study history and streak will appear here once review tracking is enabled.</p>
+            @if (studyFlipped) {
+              <div class="rating-controls" role="group" aria-label="Did you remember the answer?">
+                <button class="rating-button rating-again" type="button" [disabled]="reviewSaving || pendingReview !== null" (click)="rateStudyCard('NOT_REMEMBERED')"><strong>Not remembered</strong><small>Schedule again soon</small></button>
+                <button class="rating-button rating-good" type="button" [disabled]="reviewSaving || pendingReview !== null" (click)="rateStudyCard('REMEMBERED')"><strong>Remembered</strong><small>Continue review</small></button>
+              </div>
+            }
+            @if (reviewSaving) { <p class="study-note" role="status">Saving review…</p> }
+            @if (reviewError) {
+              <div class="review-error" role="alert"><span>{{ reviewError }}</span><button class="secondary-button" type="button" [disabled]="reviewSaving" (click)="retryStudyReview()">Retry saving</button></div>
+            }
           </section>
         } @else {
-          <section class="inline-empty"><span class="inline-empty-icon" aria-hidden="true">▤</span><h3>This deck has no cards yet</h3><p>Add your first card to start a study session.</p><button class="secondary-button" type="button" (click)="endStudy()">Back to deck</button></section>
+          <section class="inline-empty"><span class="inline-empty-icon" aria-hidden="true">✳</span><h3>{{ selectedDeck?.cardCount ? 'You’re all caught up' : 'This deck has no cards yet' }}</h3><p>{{ selectedDeck?.cardCount ? 'There are no cards due right now. Come back when the next review is ready.' : 'Add your first card to start a study session.' }}</p>@if (reviewError) { <p class="form-error" role="alert">{{ reviewError }}</p> }<button class="secondary-button" type="button" (click)="endStudy()">Back to deck</button></section>
         }
       } @else if (selectedDeck; as deck) {
         <section class="deck-detail-heading">
@@ -225,6 +235,9 @@
         <input id="deck-name" name="deckName" [(ngModel)]="deckName" maxlength="100" required autofocus placeholder="e.g. Travel English" />
         <label for="deck-description">Description <span>Optional</span></label>
         <textarea id="deck-description" name="deckDescription" [(ngModel)]="deckDescription" maxlength="500" rows="3" placeholder="What are you learning in this deck?"></textarea>
+        <label for="deck-retention">Desired retention <span>{{ (desiredRetention * 100) | number:'1.0-0' }}%</span></label>
+        <input id="deck-retention" name="desiredRetention" type="number" [(ngModel)]="desiredRetention" min="0.7" max="0.97" step="0.01" required />
+        <small class="field-help">Higher retention schedules more frequent reviews. Choose 70%–97%.</small>
         @if (loadError) { <p class="form-error" role="alert">{{ loadError }}</p> }
         <div class="modal-actions">
           <button class="secondary-button" type="button" (click)="closeForms()">Cancel</button>

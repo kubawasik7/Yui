@@ -2,11 +2,14 @@ package com.wordstead.api.cards;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.Instant;
 import java.util.UUID;
 
 import com.wordstead.api.decks.Deck;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -47,6 +50,29 @@ public class Flashcard {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "fsrs_state", nullable = false, length = 20)
+    private FsrsState fsrsState = FsrsState.LEARNING;
+
+    @Column(name = "learning_step")
+    private Integer learningStep = 0;
+
+    private Double stability;
+
+    private Double difficulty;
+
+    @Column(name = "due_at", nullable = false)
+    private Instant dueAt;
+
+    @Column(name = "last_review_at")
+    private Instant lastReviewAt;
+
+    @Column(name = "review_count", nullable = false)
+    private int reviewCount;
+
+    @Column(name = "lapse_count", nullable = false)
+    private int lapseCount;
+
     protected Flashcard() {
     }
 
@@ -61,6 +87,7 @@ public class Flashcard {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         createdAt = now;
         updatedAt = now;
+        if (dueAt == null) dueAt = now.toInstant();
     }
 
     @PreUpdate
@@ -77,6 +104,18 @@ public class Flashcard {
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
+    public void applySchedule(FsrsState state, Integer step, Double stability, Double difficulty,
+                              Instant dueAt, Instant reviewedAt, boolean lapse) {
+        this.fsrsState = state;
+        this.learningStep = step;
+        this.stability = stability;
+        this.difficulty = difficulty;
+        this.dueAt = dueAt;
+        this.lastReviewAt = reviewedAt;
+        this.reviewCount++;
+        if (lapse) this.lapseCount++;
+    }
+
     public UUID getId() { return id; }
     public Deck getDeck() { return deck; }
     public String getFront() { return front; }
@@ -86,4 +125,12 @@ public class Flashcard {
     public String getNotes() { return notes; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public FsrsState getFsrsState() { return fsrsState; }
+    public Integer getLearningStep() { return learningStep; }
+    public Double getStability() { return stability; }
+    public Double getDifficulty() { return difficulty; }
+    public Instant getDueAt() { return dueAt; }
+    public Instant getLastReviewAt() { return lastReviewAt; }
+    public int getReviewCount() { return reviewCount; }
+    public int getLapseCount() { return lapseCount; }
 }
