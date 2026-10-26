@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { Component, HostListener, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, HostListener, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { finalize, timeout } from 'rxjs';
 import {
@@ -17,6 +17,7 @@ import {
 })
 export class App implements OnInit {
   private readonly api = inject(FlashcardApiService);
+  private readonly changeDetector = inject(ChangeDetectorRef);
 
   decks: Deck[] = [];
   cards: Flashcard[] = [];
@@ -69,10 +70,12 @@ export class App implements OnInit {
         this.studyFlipped = false;
         this.studyMode = true;
         this.loadingCards = false;
+        this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
         this.loadError = this.errorMessage(error, 'Cards could not be loaded.');
         this.loadingCards = false;
+        this.changeDetector.markForCheck();
       }
     });
   }
@@ -113,10 +116,12 @@ export class App implements OnInit {
           this.selectedDeck = decks.find((deck) => deck.id === this.selectedDeck?.id) ?? null;
         }
         this.loadingDecks = false;
+        this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
         this.loadError = this.errorMessage(error, 'Your decks could not be loaded.');
         this.loadingDecks = false;
+        this.changeDetector.markForCheck();
       }
     });
   }
@@ -147,10 +152,12 @@ export class App implements OnInit {
       next: (cards) => {
         this.cards = cards;
         this.loadingCards = false;
+        this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
         this.loadError = this.errorMessage(error, 'Cards could not be loaded.');
         this.loadingCards = false;
+        this.changeDetector.markForCheck();
       }
     });
   }
@@ -190,10 +197,12 @@ export class App implements OnInit {
         this.notice = this.editingDeckId ? 'Deck updated.' : 'Deck created.';
         if (this.selectedDeck?.id === deck.id) this.selectedDeck = deck;
         this.loadDecks();
+        this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
         this.loadError = this.errorMessage(error, 'The deck could not be saved.');
         this.saving = false;
+        this.changeDetector.markForCheck();
       }
     });
   }
@@ -206,8 +215,12 @@ export class App implements OnInit {
         if (this.selectedDeck?.id === deck.id) this.showOverview();
         this.notice = 'Deck deleted.';
         this.loadDecks();
+        this.changeDetector.markForCheck();
       },
-      error: (error: unknown) => this.loadError = this.errorMessage(error, 'The deck could not be deleted.')
+      error: (error: unknown) => {
+        this.loadError = this.errorMessage(error, 'The deck could not be deleted.');
+        this.changeDetector.markForCheck();
+      }
     });
   }
 
@@ -249,7 +262,10 @@ export class App implements OnInit {
     this.saving = true;
     request.pipe(
       timeout({ first: 30_000 }),
-      finalize(() => this.saving = false)
+      finalize(() => {
+        this.saving = false;
+        this.changeDetector.markForCheck();
+      })
     ).subscribe({
       next: () => {
         const wasCreating = this.editingCardId === null;
@@ -261,9 +277,11 @@ export class App implements OnInit {
         if (wasCreating) this.searchQuery = '';
         this.loadCards();
         this.loadDecks();
+        this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
         this.loadError = this.errorMessage(error, 'The card could not be saved.');
+        this.changeDetector.markForCheck();
       }
     });
   }
@@ -275,8 +293,12 @@ export class App implements OnInit {
         this.notice = 'Card deleted.';
         this.loadCards();
         this.loadDecks();
+        this.changeDetector.markForCheck();
       },
-      error: (error: unknown) => this.loadError = this.errorMessage(error, 'The card could not be deleted.')
+      error: (error: unknown) => {
+        this.loadError = this.errorMessage(error, 'The card could not be deleted.');
+        this.changeDetector.markForCheck();
+      }
     });
   }
 
