@@ -56,6 +56,10 @@ class CardControllerTest {
         assertTrue(created.body().contains("\"mnemonic\":null"));
 
         UUID cardId = extractId(created.body());
+        HttpResponse<String> allCards = request("GET", cardsPath, null);
+        assertEquals(200, allCards.statusCode());
+        assertTrue(allCards.body().contains(cardId.toString()));
+
         HttpResponse<String> search = request("GET", cardsPath + "?query=gate", null);
         assertEquals(200, search.statusCode());
         assertTrue(search.body().contains(cardId.toString()));

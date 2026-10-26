@@ -25,7 +25,7 @@ public class CardService {
     @Transactional(readOnly = true)
     public List<CardResponse> findAll(UUID deckId, String query) {
         requireDeck(deckId);
-        String normalizedQuery = query == null || query.isBlank() ? null : query.trim();
+        String normalizedQuery = query == null || query.isBlank() ? "" : query.trim();
         return cardRepository.searchInDeck(deckId, normalizedQuery).stream().map(CardResponse::from).toList();
     }
 

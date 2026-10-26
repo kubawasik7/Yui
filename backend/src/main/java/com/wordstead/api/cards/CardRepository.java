@@ -17,7 +17,7 @@ public interface CardRepository extends JpaRepository<Flashcard, UUID> {
     @Query("""
             select card from Flashcard card
             where card.deck.id = :deckId
-              and (:query is null
+              and (:query = ''
                    or lower(card.front) like lower(concat('%', :query, '%'))
                    or lower(card.back) like lower(concat('%', :query, '%'))
                    or lower(card.example) like lower(concat('%', :query, '%'))
