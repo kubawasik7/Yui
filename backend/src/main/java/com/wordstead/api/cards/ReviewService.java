@@ -67,11 +67,14 @@ public class ReviewService {
         }
         boolean untouchedNewCard = previousState == FsrsState.LEARNING
                 && card.getStability() == null && card.getDifficulty() == null;
+        boolean successfulRecoveryFromAgain = previousState == FsrsState.LEARNING
+                && queuedForgottenCard && rating == ReviewRating.GOOD;
         FsrsSchedule scheduled = scheduler.review(
                 previousState, card.getLearningStep(), card.getStability(), card.getDifficulty(),
                 card.getLastReviewAt(), rating, reviewedAt,
                 card.getDeck().getDesiredRetention());
-        scheduled = applyNewCardRememberedRule(untouchedNewCard, rating, scheduled, reviewedAt);
+        scheduled = applyLearningGraduationRule(
+                untouchedNewCard || successfulRecoveryFromAgain, rating, scheduled, reviewedAt);
         scheduled = applyDailyDueTime(scheduled);
 
         boolean lapse = previousState == FsrsState.REVIEW && rating == ReviewRating.AGAIN;
@@ -83,12 +86,12 @@ public class ReviewService {
     }
 
     /**
-     * Product rule: one successful recall graduates a never-reviewed card and schedules it tomorrow.
-     * FSRS still initializes stability/difficulty; subsequent reviews use its normal scheduling result.
+     * Product rule: a successful recall graduates a new or just-recovered learning card and schedules
+     * it tomorrow. FSRS still calculates stability/difficulty; subsequent reviews use normal FSRS results.
      */
-    private FsrsSchedule applyNewCardRememberedRule(boolean untouchedNewCard, ReviewRating rating,
-                                                     FsrsSchedule fsrsSchedule, Instant reviewedAt) {
-        if (!untouchedNewCard || rating != ReviewRating.GOOD) return fsrsSchedule;
+    private FsrsSchedule applyLearningGraduationRule(boolean graduateOnGood, ReviewRating rating,
+                                                      FsrsSchedule fsrsSchedule, Instant reviewedAt) {
+        if (!graduateOnGood || rating != ReviewRating.GOOD) return fsrsSchedule;
         return new FsrsSchedule(FsrsState.REVIEW, null, fsrsSchedule.stability(), fsrsSchedule.difficulty(),
                 dueDatePolicy.tomorrowAtMidnight(reviewedAt), reviewedAt);
     }

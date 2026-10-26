@@ -180,6 +180,41 @@ class CardControllerTest {
         assertTrue(immediateRepeat.body().contains("\"rating\":\"AGAIN\""));
     }
 
+    @Test
+    void goodAfterAgainOnNewLearningCardGraduatesUntilNextDay() throws Exception {
+        UUID deckId = deckRepository.save(new Deck("New words", null)).getId();
+        String cardsPath = "/api/decks/" + deckId + "/cards";
+        UUID cardId = extractId(request("POST", cardsPath,
+                "{\"front\":\"木漏れ日\",\"back\":\"sunlight through leaves\"}").body());
+        String reviewPath = cardsPath + "/" + cardId + "/reviews";
+
+        HttpResponse<String> again = request("POST", reviewPath,
+                "{\"submissionId\":\"" + UUID.randomUUID() + "\",\"answer\":\"NOT_REMEMBERED\"}");
+        assertEquals(200, again.statusCode());
+        assertEquals(Duration.ofMinutes(1), Duration.between(
+                extractInstant(again.body(), "reviewedAt"), extractInstant(again.body(), "dueAt")));
+
+        String goodSubmissionId = UUID.randomUUID().toString();
+        HttpResponse<String> good = request("POST", reviewPath,
+                "{\"submissionId\":\"" + goodSubmissionId + "\",\"answer\":\"REMEMBERED\"}");
+
+        assertEquals(200, good.statusCode());
+        assertTrue(good.body().contains("\"rating\":\"GOOD\""));
+        Instant reviewedAt = extractInstant(good.body(), "reviewedAt");
+        Instant expectedDueAt = LocalDate.from(reviewedAt.atZone(ReviewDueDatePolicy.SCHEDULING_ZONE))
+                .plusDays(1).atStartOfDay(ReviewDueDatePolicy.SCHEDULING_ZONE).toInstant();
+        assertEquals(expectedDueAt, extractInstant(good.body(), "dueAt"));
+        CardReview savedGoodReview = reviewRepository.findBySubmissionId(UUID.fromString(goodSubmissionId))
+                .orElseThrow();
+        assertEquals(ReviewRating.GOOD, savedGoodReview.getRating());
+        assertEquals(expectedDueAt, savedGoodReview.getDueAt());
+        assertEquals(2, reviewRepository.count());
+
+        HttpResponse<String> updatedCard = request("GET", cardsPath + "/" + cardId, null);
+        assertTrue(updatedCard.body().contains("\"state\":\"REVIEW\""));
+        assertTrue(updatedCard.body().contains("\"reviewCount\":2"));
+    }
+
     private Instant extractInstant(String json, String field) {
         Matcher matcher = Pattern.compile("\\\"" + field + "\\\":\\\"([^\\\"]+)\\\"").matcher(json);
         if (!matcher.find()) throw new AssertionError("Missing timestamp field: " + field);
