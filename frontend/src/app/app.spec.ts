@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { afterEach } from 'vitest';
+import { afterEach, vi } from 'vitest';
 import { App } from './app';
 import { Deck, Flashcard, OverviewStats } from './flashcard-api.service';
 
@@ -17,6 +17,7 @@ describe('App', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     for (const request of httpTesting.match('/api/overview-stats')) request.flush(emptyOverviewStats());
     for (const request of httpTesting.match('/api/cards/due')) request.flush([]);
     httpTesting.verify();
@@ -122,7 +123,7 @@ describe('App', () => {
     expect(app.cards).toHaveLength(1);
   });
 
-  it('saves a word immediately and fills its translation in the background while another card is added', () => {
+  it('saves a word immediately, retries a transient AI timeout, and fills its translation in the background', async () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     httpTesting.expectOne('/api/decks').flush([]);
@@ -179,7 +180,14 @@ describe('App', () => {
     httpTesting.expectOne('/api/decks').flush([{ ...deck, cardCount: 2 }]);
     expect(app.backgroundSuggestionCardIds.has(firstCard.id)).toBe(true);
 
-    firstSuggestion.flush({
+    vi.useFakeTimers();
+    firstSuggestion.flush({ detail: 'Could not connect to Gemini (SocketTimeoutException: Read timed out).' }, {
+      status: 502, statusText: 'Bad Gateway'
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    const retriedSuggestion = httpTesting.expectOne('/api/ai/flashcard-suggestions');
+    expect(retriedSuggestion.request.body).toEqual({ word: 'incentive' });
+    retriedSuggestion.flush({
       translation: 'zachęta', example: 'The reward was an incentive to study.', mnemonic: 'An incentive invites you in.'
     });
     const readFirstCard = httpTesting.expectOne('/api/decks/deck-1/cards/card-1');

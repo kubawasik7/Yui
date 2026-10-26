@@ -1,6 +1,6 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, retry, throwError, timer } from 'rxjs';
 
 export interface Deck {
   id: string;
@@ -136,7 +136,22 @@ export class FlashcardApiService {
   }
 
   suggestFlashcard(word: string): Observable<FlashcardSuggestion> {
-    return this.http.post<FlashcardSuggestion>(`${this.baseUrl}/ai/flashcard-suggestions`, { word });
+    return this.http.post<FlashcardSuggestion>(`${this.baseUrl}/ai/flashcard-suggestions`, { word }).pipe(
+      retry({
+        count: 2,
+        delay: (error: unknown, retryCount: number) => this.shouldRetrySuggestion(error)
+          ? timer(500 * retryCount)
+          : throwError(() => error)
+      })
+    );
+  }
+
+  private shouldRetrySuggestion(error: unknown): boolean {
+    if (!(error instanceof HttpErrorResponse)) return false;
+    if ([0, 503, 504].includes(error.status)) return true;
+    if (error.status !== 502) return false;
+    const detail = typeof error.error?.detail === 'string' ? error.error.detail : '';
+    return /could not connect to Gemini|SocketTimeoutException|temporarily unavailable/i.test(detail);
   }
 
   updateCard(deckId: string, cardId: string, input: FlashcardInput): Observable<Flashcard> {

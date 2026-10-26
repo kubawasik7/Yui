@@ -476,7 +476,7 @@ export class App implements OnInit, OnDestroy {
       this.suggestionLoading = true;
       this.changeDetector.markForCheck();
       this.suggestionRequest = this.api.suggestFlashcard(word).pipe(
-        timeout({ first: 30_000 }),
+        timeout({ first: 90_000 }),
         finalize(() => {
           this.suggestionLoading = false;
           this.suggestionRequest = null;
@@ -587,7 +587,7 @@ export class App implements OnInit, OnDestroy {
     this.changeDetector.markForCheck();
 
     const request = this.api.suggestFlashcard(word).pipe(
-      timeout({ first: 30_000 }),
+      timeout({ first: 90_000 }),
       switchMap((suggestion) => this.api.getCard(deckId, savedCard.id).pipe(
         timeout({ first: 10_000 }),
         switchMap((currentCard) => {

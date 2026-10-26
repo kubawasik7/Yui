@@ -20,7 +20,7 @@ public interface CardRepository extends JpaRepository<Flashcard, UUID> {
 
     @Query("""
             select count(card) from Flashcard card
-            where card.dueAt <= :now or exists (
+            where card.lastReviewAt is null or card.dueAt <= :now or exists (
                 select review.submissionId from CardReview review
                 where review.card = card
                   and review.reviewedAt = card.lastReviewAt
@@ -41,7 +41,7 @@ public interface CardRepository extends JpaRepository<Flashcard, UUID> {
     @Query("""
             select card from Flashcard card
             where card.deck.id = :deckId
-              and (card.dueAt <= :now or exists (
+              and (card.lastReviewAt is null or card.dueAt <= :now or exists (
                   select review.submissionId from CardReview review
                   where review.card = card
                     and review.reviewedAt = card.lastReviewAt
@@ -54,7 +54,7 @@ public interface CardRepository extends JpaRepository<Flashcard, UUID> {
 
     @Query("""
             select card from Flashcard card
-            where card.dueAt <= :now or exists (
+            where card.lastReviewAt is null or card.dueAt <= :now or exists (
                 select review.submissionId from CardReview review
                 where review.card = card
                   and review.reviewedAt = card.lastReviewAt

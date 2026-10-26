@@ -95,6 +95,8 @@ class CardControllerTest {
                 "{\"front\":\"first\",\"back\":\"pierwszy\"}").body());
         UUID secondCardId = extractId(request("POST", "/api/decks/" + secondDeckId + "/cards",
                 "{\"front\":\"second\",\"back\":\"drugi\"}").body());
+        jdbcTemplate.update("UPDATE cards SET due_at = ? WHERE id = ?",
+                Timestamp.from(Instant.now().plusSeconds(3600)), secondCardId);
 
         HttpResponse<String> globalDue = request("GET", "/api/cards/due", null);
 
