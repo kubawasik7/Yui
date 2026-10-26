@@ -1,8 +1,8 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ChangeDetectorRef, Component, HostListener, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize, timeout } from 'rxjs';
+import { Subscription, finalize, timeout } from 'rxjs';
 import {
   Deck,
   Flashcard,
@@ -17,7 +17,7 @@ import {
   imports: [CommonModule, FormsModule],
   templateUrl: './app.html'
 })
-export class App implements OnInit {
+export class App implements OnInit, OnDestroy {
   private readonly api = inject(FlashcardApiService);
   private readonly changeDetector = inject(ChangeDetectorRef);
 
@@ -54,9 +54,16 @@ export class App implements OnInit {
   deleteCardError = '';
   suggestionLoading = false;
   suggestionError = '';
+  private suggestionTimer: ReturnType<typeof setTimeout> | null = null;
+  private suggestionRequest: Subscription | null = null;
+  private lastAppliedSuggestion: Partial<FlashcardSuggestion> | null = null;
 
   ngOnInit(): void {
     this.loadDecks();
+  }
+
+  ngOnDestroy(): void {
+    this.cancelPendingSuggestion();
   }
 
   get totalCards(): number {
@@ -314,6 +321,8 @@ export class App implements OnInit {
   }
 
   createCard(): void {
+    this.cancelPendingSuggestion();
+    this.lastAppliedSuggestion = null;
     this.editingCardId = null;
     this.cardForm = this.emptyCard();
     this.cardFormOpen = true;
@@ -323,6 +332,8 @@ export class App implements OnInit {
   }
 
   editCard(card: Flashcard): void {
+    this.cancelPendingSuggestion();
+    this.lastAppliedSuggestion = null;
     this.editingCardId = card.id;
     this.cardForm = {
       front: card.front,
@@ -337,31 +348,70 @@ export class App implements OnInit {
     this.loadError = '';
   }
 
-  suggestCardDetails(): void {
-    const word = this.cardForm.front.trim();
-    if (!word || this.editingCardId || this.suggestionLoading) return;
-
-    this.suggestionLoading = true;
+  onCardFrontChange(value: string): void {
+    this.clearPreviousSuggestion();
+    if (this.suggestionTimer) clearTimeout(this.suggestionTimer);
+    this.suggestionTimer = null;
+    this.cancelPendingSuggestion();
     this.suggestionError = '';
-    this.api.suggestFlashcard(word).pipe(
-      timeout({ first: 30_000 }),
-      finalize(() => {
-        this.suggestionLoading = false;
-        this.changeDetector.markForCheck();
-      })
-    ).subscribe({
-      next: (suggestion: FlashcardSuggestion) => {
-        if (this.cardForm.front.trim() !== word) return;
-        if (!this.cardForm.back.trim()) this.cardForm.back = suggestion.translation;
-        if (!this.cardForm.example?.trim()) this.cardForm.example = suggestion.example;
-        if (!this.cardForm.mnemonic?.trim()) this.cardForm.mnemonic = suggestion.mnemonic;
-        this.changeDetector.markForCheck();
-      },
-      error: (error: unknown) => {
-        this.suggestionError = this.errorMessage(error, 'AI suggestions could not be generated.');
-        this.changeDetector.markForCheck();
-      }
-    });
+
+    const word = value.trim();
+    if (!word || this.editingCardId) return;
+
+    this.suggestionTimer = setTimeout(() => {
+      this.suggestionTimer = null;
+      if (this.cardForm.front.trim() !== word) return;
+      this.suggestionLoading = true;
+      this.changeDetector.markForCheck();
+      this.suggestionRequest = this.api.suggestFlashcard(word).pipe(
+        timeout({ first: 30_000 }),
+        finalize(() => {
+          this.suggestionLoading = false;
+          this.suggestionRequest = null;
+          this.changeDetector.markForCheck();
+        })
+      ).subscribe({
+        next: (suggestion: FlashcardSuggestion) => {
+          if (this.cardForm.front.trim() !== word) return;
+          const applied: Partial<FlashcardSuggestion> = {};
+          if (!this.cardForm.back.trim()) {
+            this.cardForm.back = suggestion.translation;
+            applied.translation = suggestion.translation;
+          }
+          if (!this.cardForm.example?.trim()) {
+            this.cardForm.example = suggestion.example;
+            applied.example = suggestion.example;
+          }
+          if (!this.cardForm.mnemonic?.trim()) {
+            this.cardForm.mnemonic = suggestion.mnemonic;
+            applied.mnemonic = suggestion.mnemonic;
+          }
+          this.lastAppliedSuggestion = applied;
+          this.changeDetector.markForCheck();
+        },
+        error: (error: unknown) => {
+          this.suggestionError = this.errorMessage(error, 'AI suggestions could not be generated.');
+          this.changeDetector.markForCheck();
+        }
+      });
+    }, 600);
+  }
+
+  private cancelPendingSuggestion(): void {
+    if (this.suggestionTimer) clearTimeout(this.suggestionTimer);
+    this.suggestionTimer = null;
+    const request = this.suggestionRequest;
+    this.suggestionRequest = null;
+    this.suggestionLoading = false;
+    request?.unsubscribe();
+  }
+
+  private clearPreviousSuggestion(): void {
+    if (!this.lastAppliedSuggestion) return;
+    if (this.lastAppliedSuggestion.translation === this.cardForm.back) this.cardForm.back = '';
+    if (this.lastAppliedSuggestion.example === this.cardForm.example) this.cardForm.example = '';
+    if (this.lastAppliedSuggestion.mnemonic === this.cardForm.mnemonic) this.cardForm.mnemonic = '';
+    this.lastAppliedSuggestion = null;
   }
 
   saveCard(): void {
@@ -387,6 +437,7 @@ export class App implements OnInit {
     ).subscribe({
       next: () => {
         const wasCreating = this.editingCardId === null;
+        this.cancelPendingSuggestion();
         this.cardFormOpen = false;
         this.cardForm = this.emptyCard();
         this.editingCardId = null;
@@ -438,6 +489,7 @@ export class App implements OnInit {
   }
 
   closeForms(): void {
+    this.cancelPendingSuggestion();
     this.deckFormOpen = false;
     this.cardFormOpen = false;
     this.suggestionError = '';

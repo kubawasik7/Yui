@@ -259,7 +259,7 @@
         <div class="form-columns">
           <div>
             <label for="card-front">Front <span>Word or question</span></label>
-            <textarea id="card-front" name="front" [(ngModel)]="cardForm.front" (blur)="suggestCardDetails()" maxlength="1000" rows="2" required placeholder="to board"></textarea>
+            <textarea id="card-front" name="front" [(ngModel)]="cardForm.front" (ngModelChange)="onCardFrontChange($event)" maxlength="1000" rows="2" required placeholder="to board"></textarea>
           </div>
           <div>
             <label for="card-back">Back <span>Meaning or answer</span></label>
@@ -272,10 +272,8 @@
         <input id="card-mnemonic" name="mnemonic" [(ngModel)]="cardForm.mnemonic" maxlength="1000" placeholder="A hint that helps you remember" />
         @if (!editingCardId) {
           <div class="ai-suggestion-row">
-            <button class="secondary-button" type="button" [disabled]="suggestionLoading || !cardForm.front.trim()" (click)="suggestCardDetails()">
-              {{ suggestionLoading ? 'Generating…' : '✦ Generate with AI' }}
-            </button>
-            <small>Suggestions are generated when you leave the word field. Existing text is preserved.</small>
+            <span class="ai-suggestion-indicator" [class.is-loading]="suggestionLoading" aria-hidden="true">✦</span>
+            <small aria-live="polite">{{ suggestionLoading ? 'Generating translation and study hints…' : 'Translation, example, and mnemonic are generated automatically.' }}</small>
           </div>
         }
         @if (suggestionError) { <p class="form-error" role="alert">{{ suggestionError }}</p> }
