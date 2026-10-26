@@ -25,10 +25,10 @@ public class FlashcardSuggestionService {
     private final String apiKey;
     private final String model;
 
-    public FlashcardSuggestionService(RestClient.Builder restClientBuilder, ObjectMapper objectMapper,
+    public FlashcardSuggestionService(ObjectMapper objectMapper,
             @Value("${yui.ai.gemini.api-key:}") String apiKey,
             @Value("${yui.ai.gemini.model:gemini-3.8-flash}") String model) {
-        this.restClient = restClientBuilder.build();
+        this.restClient = RestClient.create();
         this.objectMapper = objectMapper;
         this.apiKey = apiKey;
         this.model = model;
