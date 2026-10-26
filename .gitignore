@@ -52,3 +52,7 @@ __screenshots__/
 Thumbs.db
 
 /.run/
+/desktop/node_modules/
+/desktop/release/
+/desktop/resources/backend/
+/desktop/resources/runtime/

@@ -1,0 +1,65 @@
+{
+  "name": "yui-desktop",
+  "version": "1.0.0",
+  "author": "Yui",
+  "private": true,
+  "productName": "Yui",
+  "description": "Yui flashcard learning app for Windows",
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "node scripts/dev.cjs",
+    "build:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1"
+  },
+  "devDependencies": {
+    "electron": "45.0.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.yui.flashcards",
+    "productName": "Yui",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "icon.ico",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../frontend/dist/yui-frontend/browser",
+        "to": "frontend"
+      },
+      {
+        "from": "resources/backend/yui-api.jar",
+        "to": "backend/yui-api.jar"
+      },
+      {
+        "from": "resources/runtime",
+        "to": "runtime"
+      },
+      {
+        "from": "icon.ico",
+        "to": "app.ico"
+      }
+    ],
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

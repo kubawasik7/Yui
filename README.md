@@ -58,6 +58,40 @@ Set `GEMINI_API_KEY` in the IntelliJ run configuration environment variables for
 
 The backend endpoint is `POST /api/ai/flashcard-suggestions` with `{"word":"serendipity"}`; it returns `translation`, `example`, and `mnemonic` strings. Gemini credentials are configured with `GEMINI_API_KEY` and are not needed when using the rest of the app without AI.
 
+### Windows desktop app
+
+Yui can be run in an Electron window or packaged as a Windows NSIS installer. Electron serves the production Angular files from a loopback-only local server and proxies `/api` to a Spring Boot process bound to `127.0.0.1`. The renderer has Node integration disabled, context isolation enabled, and sandboxing enabled. A single-instance lock prevents multiple managed backend processes; the app stops only a backend process it started itself. It never starts or stops PostgreSQL.
+
+#### Developer run
+
+Install the frontend and desktop dependencies once:
+
+```powershell
+cd frontend
+npm ci
+cd ..\desktop
+npm ci
+```
+
+Set `DATABASE_PASSWORD` in the current PowerShell session (and optionally `GEMINI_API_KEY`), then run `npm run dev` from `desktop`. The command starts Angular CLI and opens Yui in Electron. Electron uses a healthy API already running on port 8080, such as one launched from IntelliJ; otherwise it starts the backend with Maven. The existing Angular CLI and Maven workflows remain available independently.
+
+#### Build the Windows installer
+
+The build computer needs Windows, Node.js 22 or newer, Maven, and a full JDK 21 or newer with `jlink`. Install the Angular and Electron dependencies as above, then run:
+
+```powershell
+cd desktop
+npm run build:windows
+```
+
+The script builds Angular and the Spring Boot JAR, creates a trimmed Java runtime from the build JDK, and runs electron-builder. The installer is written under `desktop\release\Yui Setup 1.0.0.exe`. The installed app includes its Java runtime, so end users do not need Java, Maven, Node.js, Angular CLI, or IntelliJ.
+
+#### PostgreSQL and local settings
+
+PostgreSQL remains a separate service and must already be installed and running on the computer. Create or use the existing `wordstead` database and `wordstead` database user; Yui does not bundle, migrate, start, stop, or remove PostgreSQL. Existing cards, review history, and FSRS state stay in that database and are not moved or deleted by the installer. The `DATABASE_URL`, `DATABASE_USER`, and `GEMINI_MODEL` settings are in `%APPDATA%\Yui\config.properties`, created at first launch. Set `DATABASE_PASSWORD` as a Windows user environment variable. `GEMINI_API_KEY` is optional and must also be configured as a Windows user environment variable; it is never bundled with the app. Desktop-launched apps do not inherit environment variables set only in an IntelliJ run configuration. After changing Windows environment variables, restart Yui.
+
+Yui writes `desktop.log` and `backend.log` to `%APPDATA%\Yui\logs`. If PostgreSQL is unavailable or credentials are incorrect, the app shows a startup error and the backend log contains the database connection details. User settings and database contents are kept when the app is uninstalled. The un-signed installer may display a Windows SmartScreen warning; code signing is not configured.
+
 Deck endpoints:
 
 | Method | Path | Purpose |
