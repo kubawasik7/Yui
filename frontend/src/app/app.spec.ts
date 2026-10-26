@@ -119,11 +119,15 @@ describe('App', () => {
     httpTesting.expectOne('/api/decks').flush([{ ...deck, cardCount: 1 }]);
     const firstSuggestion = httpTesting.expectOne('/api/ai/flashcard-suggestions');
     expect(firstSuggestion.request.body).toEqual({ word: 'incentive' });
-    expect(app.cardFormOpen).toBe(false);
+    expect(app.cardFormOpen).toBe(true);
     expect(app.cardForm.front).toBe('');
+    expect(app.cardForm.back).toBe('');
+    expect(app.cardForm.example).toBe('');
+    expect(app.cardForm.mnemonic).toBe('');
+    expect(app.cardSavedMessage).toBe('Card added. Add your next word.');
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('#card-front'));
     expect(app.backgroundSuggestionCardIds.has(firstCard.id)).toBe(true);
 
-    app.createCard();
     app.cardForm.front = 'motivation';
     app.cardForm.back = 'motywacja';
     app.cardForm.example = 'Motivation helps us learn.';
@@ -256,5 +260,66 @@ describe('App', () => {
     expect(app.studyCards).toHaveLength(0);
     expect(app.reviewSaving).toBe(false);
     expect(app.pendingReview).toBeNull();
+  });
+
+  it('uses Space to reveal and remember, and F to mark a revealed card not remembered', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const deck: Deck = {
+      id: 'deck-1', name: 'Travel English', description: null, cardCount: 2, desiredRetention: 0.9,
+      createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
+    };
+    httpTesting.expectOne('/api/decks').flush([deck]);
+    const firstCard: Flashcard = {
+      id: 'card-1', deckId: deck.id, front: 'board', back: 'wsiadać', example: null,
+      mnemonic: null, notes: null, state: 'LEARNING', stability: null, difficulty: null,
+      dueAt: '2026-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
+      createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
+    };
+    const secondCard: Flashcard = { ...firstCard, id: 'card-2', front: 'forget', back: 'zapomnieć' };
+    const app = fixture.componentInstance;
+    app.startStudy(deck);
+    httpTesting.expectOne((request) =>
+      request.url === '/api/decks/deck-1/cards' && request.params.get('dueOnly') === 'true'
+    ).flush([firstCard, secondCard]);
+    fixture.detectChanges();
+
+    const pressOnStudyCard = (code: string): KeyboardEvent => {
+      const studyButton = fixture.nativeElement.querySelector('.study-flashcard') as HTMLButtonElement;
+      studyButton.focus();
+      const event = new KeyboardEvent('keydown', { code, bubbles: true, cancelable: true });
+      studyButton.dispatchEvent(event);
+      return event;
+    };
+
+    expect(pressOnStudyCard('Space').defaultPrevented).toBe(true);
+    expect(app.studyFlipped).toBe(true);
+    expect(pressOnStudyCard('Space').defaultPrevented).toBe(true);
+    const rememberedRequest = httpTesting.expectOne('/api/decks/deck-1/cards/card-1/reviews');
+    expect(rememberedRequest.request.body.answer).toBe('REMEMBERED');
+    rememberedRequest.flush({
+      submissionId: app.pendingReview!.submissionId, cardId: firstCard.id, rating: 'GOOD',
+      reviewedAt: '2026-10-23T10:00:00Z', dueAt: '2026-10-24T00:00:00Z'
+    });
+    httpTesting.expectOne((request) =>
+      request.url === '/api/decks/deck-1/cards' && request.params.get('dueOnly') === 'true'
+    ).flush([secondCard]);
+    fixture.detectChanges();
+
+    expect(pressOnStudyCard('KeyF').defaultPrevented).toBe(false);
+    expect(pressOnStudyCard('Space').defaultPrevented).toBe(true);
+    expect(pressOnStudyCard('KeyF').defaultPrevented).toBe(true);
+    const notRememberedRequest = httpTesting.expectOne('/api/decks/deck-1/cards/card-2/reviews');
+    expect(notRememberedRequest.request.body.answer).toBe('NOT_REMEMBERED');
+    notRememberedRequest.flush({
+      submissionId: app.pendingReview!.submissionId, cardId: secondCard.id, rating: 'AGAIN',
+      reviewedAt: '2026-10-23T10:00:00Z', dueAt: '2026-10-23T10:01:00Z'
+    });
+    httpTesting.expectOne((request) =>
+      request.url === '/api/decks/deck-1/cards' && request.params.get('dueOnly') === 'true'
+    ).flush([]);
+
+    expect(app.studyCards).toHaveLength(0);
+    expect(app.reviewSaving).toBe(false);
   });
 });

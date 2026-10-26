@@ -46,6 +46,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .danger-button:disabled,.confirm-actions .secondary-button:disabled { cursor: wait; opacity: .6; }
 .confirm-footnote { display: flex; justify-content: center; gap: 6px; margin: 17px 0 0; color: #737987; font-size: 9px; }
 .confirm-footnote span { color: var(--sakura); }
+.card-save-status { margin: 0 0 12px; color: var(--bamboo); font-size: 10px; }
+.shortcut-divider { padding: 0 6px; color: #59606d; }
 @keyframes confirm-enter { from { opacity: 0; transform: translateY(7px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @media (max-width: 480px) { .confirm-dialog { padding: 24px 20px; } }
 @media (prefers-reduced-motion: reduce) { .confirm-dialog { animation: none; } }

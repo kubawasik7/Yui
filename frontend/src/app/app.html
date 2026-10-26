@@ -96,7 +96,11 @@
               </span>
             </button>
             <div class="study-controls">
-              <span><kbd>Space</kbd> flip the card</span>
+              @if (studyFlipped) {
+                <span><kbd>Space</kbd> Remembered <span class="shortcut-divider">·</span> <kbd>F</kbd> Not remembered</span>
+              } @else {
+                <span><kbd>Space</kbd> reveal the answer</span>
+              }
             </div>
             @if (studyFlipped) {
               <div class="rating-controls" role="group" aria-label="Did you remember the answer?">
@@ -281,6 +285,7 @@
       <p class="eyebrow">{{ selectedDeck?.name }}</p>
       <h2 id="card-form-title">{{ editingCardId ? 'Edit your card' : 'Add a card' }}</h2>
       <p class="modal-intro">Capture the word and the context that makes it memorable.</p>
+      @if (cardSavedMessage) { <p class="card-save-status" role="status">{{ cardSavedMessage }}</p> }
       <form (ngSubmit)="saveCard()">
         <div class="form-columns">
           <div>

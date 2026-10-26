@@ -49,6 +49,7 @@ export class App implements OnInit, OnDestroy {
   cardFormOpen = false;
   editingCardId: string | null = null;
   cardForm: FlashcardInput = this.emptyCard();
+  cardSavedMessage = '';
   cardToDelete: Flashcard | null = null;
   deletingCard = false;
   deleteCardError = '';
@@ -187,11 +188,20 @@ export class App implements OnInit, OnDestroy {
       this.cancelCardDelete();
       return;
     }
-    if (!this.studyMode || event.code !== 'Space' || event.repeat) return;
+    if (!this.studyMode) return;
     const target = event.target;
-    if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(target.tagName))) return;
-    event.preventDefault();
-    this.flipStudyCard();
+    if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+
+    if (event.code === 'Space') {
+      event.preventDefault();
+      if (event.repeat) return;
+      if (this.studyFlipped) this.rateStudyCard('REMEMBERED');
+      else this.flipStudyCard();
+    } else if (event.code === 'KeyF' && this.studyFlipped) {
+      event.preventDefault();
+      if (event.repeat) return;
+      this.rateStudyCard('NOT_REMEMBERED');
+    }
   }
 
   loadDecks(): void {
@@ -331,6 +341,7 @@ export class App implements OnInit, OnDestroy {
     this.lastAppliedSuggestion = null;
     this.editingCardId = null;
     this.cardForm = this.emptyCard();
+    this.cardSavedMessage = '';
     this.cardFormOpen = true;
     this.suggestionError = '';
     this.notice = '';
@@ -348,6 +359,7 @@ export class App implements OnInit, OnDestroy {
       mnemonic: card.mnemonic ?? '',
       notes: card.notes ?? ''
     };
+    this.cardSavedMessage = '';
     this.cardFormOpen = true;
     this.suggestionError = '';
     this.notice = '';
@@ -355,6 +367,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   onCardFrontChange(value: string): void {
+    this.cardSavedMessage = '';
     this.clearPreviousSuggestion();
     if (this.suggestionTimer) clearTimeout(this.suggestionTimer);
     this.suggestionTimer = null;
@@ -447,9 +460,12 @@ export class App implements OnInit, OnDestroy {
       next: (savedCard) => {
         const wasCreating = creating;
         this.cancelPendingSuggestion();
-        this.cardFormOpen = false;
+        this.cardFormOpen = wasCreating;
         this.cardForm = this.emptyCard();
         this.editingCardId = null;
+        this.lastAppliedSuggestion = null;
+        this.suggestionError = '';
+        this.cardSavedMessage = wasCreating ? 'Card added. Add your next word.' : '';
         this.loadError = '';
         this.notice = '';
         if (wasCreating) this.searchQuery = '';
@@ -458,6 +474,7 @@ export class App implements OnInit, OnDestroy {
         if (wasCreating && (!input.back || !input.example || !input.mnemonic)) {
           this.startBackgroundSuggestion(deckId, savedCard, input.front);
         }
+        if (wasCreating) document.getElementById('card-front')?.focus();
         this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
@@ -556,6 +573,7 @@ export class App implements OnInit, OnDestroy {
     this.cancelPendingSuggestion();
     this.deckFormOpen = false;
     this.cardFormOpen = false;
+    this.cardSavedMessage = '';
     this.suggestionError = '';
   }
 
