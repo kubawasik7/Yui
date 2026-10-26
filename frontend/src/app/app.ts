@@ -28,6 +28,7 @@ export class App implements OnInit {
   loadError = '';
   notice = '';
   searchQuery = '';
+  activeSection: 'overview' | 'decks' | 'study' = 'overview';
   studyMode = false;
   studyCards: Flashcard[] = [];
   studyIndex = 0;
@@ -54,6 +55,10 @@ export class App implements OnInit {
     return this.decks.reduce((total, deck) => total + deck.cardCount, 0);
   }
 
+  get hasStudyCards(): boolean {
+    return this.decks.some((deck) => deck.cardCount > 0);
+  }
+
   get currentStudyCard(): Flashcard | null {
     return this.studyCards[this.studyIndex] ?? null;
   }
@@ -61,6 +66,7 @@ export class App implements OnInit {
   startStudy(deck: Deck, event?: Event): void {
     event?.stopPropagation();
     this.selectedDeck = deck;
+    this.activeSection = 'study';
     this.studyDeckName = deck.name;
     this.searchQuery = '';
     this.loadingCards = true;
@@ -78,6 +84,7 @@ export class App implements OnInit {
       error: (error: unknown) => {
         this.loadError = this.errorMessage(error, 'Cards could not be loaded.');
         this.loadingCards = false;
+        this.activeSection = 'decks';
         this.changeDetector.markForCheck();
       }
     });
@@ -85,6 +92,7 @@ export class App implements OnInit {
 
   endStudy(): void {
     this.studyMode = false;
+    this.activeSection = 'decks';
     this.studyCards = [];
     this.studyIndex = 0;
     this.studyFlipped = false;
@@ -135,15 +143,27 @@ export class App implements OnInit {
 
   openDeck(deck: Deck): void {
     this.selectedDeck = deck;
+    this.activeSection = 'decks';
     this.searchQuery = '';
     this.loadCards();
   }
 
   showOverview(): void {
     this.endStudy();
+    this.activeSection = 'overview';
     this.selectedDeck = null;
     this.cards = [];
     this.loadError = '';
+  }
+
+  showDecks(): void {
+    this.endStudy();
+    this.activeSection = 'decks';
+    this.selectedDeck = null;
+    this.cards = [];
+    this.loadError = '';
+    this.changeDetector.markForCheck();
+    requestAnimationFrame(() => document.getElementById('deck-library')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }
 
   startFirstStudy(): void {

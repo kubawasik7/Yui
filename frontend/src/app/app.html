@@ -7,14 +7,14 @@
 
     <div class="nav-label">WORKSPACE</div>
     <nav>
-      <button class="nav-item" [class.active]="!selectedDeck" type="button" (click)="showOverview()">
+      <button class="nav-item" [class.active]="activeSection === 'overview'" [attr.aria-current]="activeSection === 'overview' ? 'page' : null" type="button" (click)="showOverview()">
         <span class="nav-icon" aria-hidden="true">⌂</span>Overview
       </button>
-      <button class="nav-item" [class.active]="!!selectedDeck" type="button" (click)="showOverview()">
+      <button class="nav-item" [class.active]="activeSection === 'decks'" [attr.aria-current]="activeSection === 'decks' ? 'page' : null" type="button" (click)="showDecks()">
         <span class="nav-icon" aria-hidden="true">▤</span>My decks
         <span class="nav-count">{{ decks.length }}</span>
       </button>
-      <button class="nav-item" [class.active]="studyMode" type="button" [disabled]="!decks.length" (click)="startFirstStudy()">
+      <button class="nav-item" [class.active]="activeSection === 'study'" [attr.aria-current]="activeSection === 'study' ? 'page' : null" type="button" [disabled]="!hasStudyCards" (click)="startFirstStudy()">
         <span class="nav-icon" aria-hidden="true">✳</span>Study
         <span class="nav-count">{{ decks.length ? '↗' : '—' }}</span>
       </button>
@@ -164,7 +164,7 @@
           <span class="streak-status">READY WHEN YOU ARE</span>
         </section>
 
-        <section class="section-heading">
+        <section id="deck-library" class="section-heading">
           <div><p class="eyebrow">YOUR LEARNING SPACE</p><h2>Ready when you are</h2></div>
           <span class="library-count">{{ decks.length }} {{ decks.length === 1 ? 'deck' : 'decks' }} <span>·</span> {{ totalCards }} {{ totalCards === 1 ? 'card' : 'cards' }}</span>
         </section>
