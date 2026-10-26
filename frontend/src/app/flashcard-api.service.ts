@@ -66,6 +66,25 @@ export interface ReviewResult {
   dueAt: string;
 }
 
+export interface DailyActivity {
+  date: string;
+  reviews: number;
+}
+
+export interface DailyForecast {
+  date: string;
+  cards: number;
+}
+
+export interface OverviewStats {
+  today: string;
+  totalCards: number;
+  dueToday: number;
+  masteredCards: number;
+  activity: DailyActivity[];
+  upcoming: DailyForecast[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class FlashcardApiService {
   private readonly http = inject(HttpClient);
@@ -73,6 +92,10 @@ export class FlashcardApiService {
 
   getDecks(): Observable<Deck[]> {
     return this.http.get<Deck[]>(`${this.baseUrl}/decks`);
+  }
+
+  getOverviewStats(): Observable<OverviewStats> {
+    return this.http.get<OverviewStats>(`${this.baseUrl}/overview-stats`);
   }
 
   createDeck(input: DeckInput): Observable<Deck> {

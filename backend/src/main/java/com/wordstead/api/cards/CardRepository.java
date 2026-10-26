@@ -16,6 +16,22 @@ public interface CardRepository extends JpaRepository<Flashcard, UUID> {
 
     long countByDeckId(UUID deckId);
 
+    long countByFsrsState(FsrsState state);
+
+    @Query("""
+            select count(card) from Flashcard card
+            where card.dueAt <= :now or exists (
+                select review.submissionId from CardReview review
+                where review.card = card
+                  and review.reviewedAt = card.lastReviewAt
+                  and review.rating = :againRating
+            )
+            """)
+    long countDueCards(@Param("now") Instant now, @Param("againRating") ReviewRating againRating);
+
+    @Query("select card.dueAt from Flashcard card where card.dueAt >= :from and card.dueAt < :until")
+    List<Instant> findDueDatesBetween(@Param("from") Instant from, @Param("until") Instant until);
+
     Optional<Flashcard> findByIdAndDeckId(UUID id, UUID deckId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

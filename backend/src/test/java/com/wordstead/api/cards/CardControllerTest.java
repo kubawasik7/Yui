@@ -4,6 +4,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -40,6 +42,9 @@ class CardControllerTest {
 
     @Autowired
     private CardReviewRepository reviewRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void clearCardsAndDecks() {
@@ -126,6 +131,8 @@ class CardControllerTest {
         HttpResponse<String> created = request("POST", cardsPath,
                 "{\"front\":\"board\",\"back\":\"wsiadać\"}");
         UUID cardId = extractId(created.body());
+        jdbcTemplate.update("UPDATE cards SET due_at = ? WHERE id = ?",
+                Timestamp.from(Instant.now().minusSeconds(60)), cardId);
 
         HttpResponse<String> dueBefore = request("GET", cardsPath + "?dueOnly=true", null);
         assertTrue(dueBefore.body().contains(cardId.toString()));

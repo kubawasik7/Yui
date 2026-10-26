@@ -3,7 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { afterEach } from 'vitest';
 import { App } from './app';
-import { Deck, Flashcard } from './flashcard-api.service';
+import { Deck, Flashcard, OverviewStats } from './flashcard-api.service';
 
 describe('App', () => {
   let httpTesting: HttpTestingController;
@@ -16,7 +16,10 @@ describe('App', () => {
     httpTesting = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => httpTesting.verify());
+  afterEach(() => {
+    for (const request of httpTesting.match('/api/overview-stats')) request.flush(emptyOverviewStats());
+    httpTesting.verify();
+  });
 
   it('should create the app', () => {
     const fixture = TestBed.createComponent(App);
@@ -33,6 +36,37 @@ describe('App', () => {
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain('Small steps,');
+  });
+
+  it('renders counts, seven-day review activity, and the FSRS forecast from overview statistics', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    httpTesting.expectOne('/api/decks').flush([]);
+    httpTesting.expectOne('/api/overview-stats').flush({
+      today: '2026-10-26', totalCards: 61, dueToday: 7, masteredCards: 42,
+      activity: [
+        { date: '2026-10-20', reviews: 1 }, { date: '2026-10-21', reviews: 3 },
+        { date: '2026-10-22', reviews: 0 }, { date: '2026-10-23', reviews: 4 },
+        { date: '2026-10-24', reviews: 2 }, { date: '2026-10-25', reviews: 0 },
+        { date: '2026-10-26', reviews: 5 }
+      ],
+      upcoming: [
+        { date: '2026-10-27', cards: 18 }, { date: '2026-10-28', cards: 31 }, { date: '2026-10-29', cards: 12 }
+      ]
+    } satisfies OverviewStats);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.overview-stat-grid')?.textContent).toContain('61');
+    expect(compiled.querySelector('.overview-stat-grid')?.textContent).toContain('7');
+    expect(compiled.querySelector('.overview-stat-grid')?.textContent).toContain('42');
+    expect(compiled.querySelector('.activity-chart')?.getAttribute('aria-label')).toContain('Mon: 5 reviews');
+    expect(compiled.querySelector('.forecast-list')?.textContent).toContain('Tomorrow');
+    expect(compiled.querySelector('.forecast-list')?.textContent).toContain('18');
+    expect(compiled.querySelector('.forecast-list')?.textContent).toContain('In 2 days');
+    expect(compiled.querySelector('.forecast-list')?.textContent).toContain('31');
+    expect(compiled.querySelector('.forecast-list')?.textContent).toContain('In 3 days');
+    expect(compiled.querySelector('.forecast-list')?.textContent).toContain('12');
   });
 
   it('creates a deck and card through the API', () => {
@@ -323,3 +357,9 @@ describe('App', () => {
     expect(app.reviewSaving).toBe(false);
   });
 });
+
+function emptyOverviewStats(): OverviewStats {
+  return {
+    today: '2026-10-26', totalCards: 0, dueToday: 0, masteredCards: 0, activity: [], upcoming: []
+  };
+}

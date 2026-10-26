@@ -9,6 +9,7 @@ import {
   FlashcardApiService,
   FlashcardInput,
   FlashcardSuggestion,
+  OverviewStats,
   ReviewAnswer
 } from './flashcard-api.service';
 
@@ -28,6 +29,9 @@ export class App implements OnInit, OnDestroy {
   loadingCards = false;
   saving = false;
   loadError = '';
+  overviewStats: OverviewStats | null = null;
+  overviewStatsLoading = false;
+  overviewStatsError = '';
   notice = '';
   searchQuery = '';
   activeSection: 'overview' | 'decks' | 'study' = 'overview';
@@ -65,6 +69,7 @@ export class App implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadDecks();
+    this.loadOverviewStats();
   }
 
   ngOnDestroy(): void {
@@ -145,6 +150,7 @@ export class App implements OnInit, OnDestroy {
       next: () => {
         this.pendingReview = null;
         this.reviewSaving = false;
+        this.loadOverviewStats();
         this.loadDueStudyCards();
         this.changeDetector.markForCheck();
       },
@@ -224,6 +230,62 @@ export class App implements OnInit, OnDestroy {
     });
   }
 
+  loadOverviewStats(): void {
+    this.overviewStatsLoading = true;
+    this.overviewStatsError = '';
+    this.api.getOverviewStats().subscribe({
+      next: (stats) => {
+        this.overviewStats = stats;
+        this.overviewStatsLoading = false;
+        this.changeDetector.markForCheck();
+      },
+      error: (error: unknown) => {
+        this.overviewStatsError = this.errorMessage(error, 'Your study activity could not be loaded.');
+        this.overviewStatsLoading = false;
+        this.changeDetector.markForCheck();
+      }
+    });
+  }
+
+  activityBarHeight(reviews: number): number {
+    const max = Math.max(1, ...(this.overviewStats?.activity.map((day) => day.reviews) ?? [0]));
+    return reviews === 0 ? 0 : Math.max(10, Math.round((reviews / max) * 100));
+  }
+
+  forecastBarWidth(cards: number): number {
+    const max = Math.max(1, ...(this.overviewStats?.upcoming.map((day) => day.cards) ?? [0]));
+    return cards === 0 ? 0 : Math.max(4, Math.round((cards / max) * 100));
+  }
+
+  dashboardDayLabel(date: string, options: Intl.DateTimeFormatOptions = { weekday: 'short' }): string {
+    return new Intl.DateTimeFormat('en', { ...options, timeZone: 'UTC' }).format(new Date(`${date}T12:00:00Z`));
+  }
+
+  dashboardDateLabel(date: string): string {
+    return this.dashboardDayLabel(date, { month: 'short', day: 'numeric' });
+  }
+
+  forecastDayLabel(date: string): string {
+    if (!this.overviewStats) return '';
+    const start = Date.parse(`${this.overviewStats.today}T00:00:00Z`);
+    const target = Date.parse(`${date}T00:00:00Z`);
+    const offset = Math.round((target - start) / 86_400_000);
+    return offset === 1 ? 'Tomorrow' : `In ${offset} days`;
+  }
+
+  hasReviewActivity(stats: OverviewStats): boolean {
+    return stats.activity.some((day) => day.reviews > 0);
+  }
+
+  activityChartLabel(stats: OverviewStats): string {
+    const details = stats.activity.map((day) => `${this.dashboardDayLabel(day.date)}: ${day.reviews} reviews`).join(', ');
+    return `Review activity for the last seven days. ${details}`;
+  }
+
+  activityDescription(day: { date: string; reviews: number }): string {
+    return `${this.dashboardDayLabel(day.date)}: ${day.reviews} reviews`;
+  }
+
   openDeck(deck: Deck): void {
     this.selectedDeck = deck;
     this.activeSection = 'decks';
@@ -237,6 +299,7 @@ export class App implements OnInit, OnDestroy {
     this.selectedDeck = null;
     this.cards = [];
     this.loadError = '';
+    this.loadOverviewStats();
   }
 
   showDecks(): void {
@@ -327,6 +390,7 @@ export class App implements OnInit, OnDestroy {
         if (this.selectedDeck?.id === deck.id) this.showOverview();
         this.notice = 'Deck deleted.';
         this.loadDecks();
+        this.loadOverviewStats();
         this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
@@ -471,6 +535,7 @@ export class App implements OnInit, OnDestroy {
         if (wasCreating) this.searchQuery = '';
         this.loadCards();
         this.loadDecks();
+        this.loadOverviewStats();
         if (wasCreating && (!input.back || !input.example || !input.mnemonic)) {
           this.startBackgroundSuggestion(deckId, savedCard, input.front);
         }
@@ -559,6 +624,7 @@ export class App implements OnInit, OnDestroy {
         this.notice = 'Card deleted.';
         this.loadCards();
         this.loadDecks();
+        this.loadOverviewStats();
         this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {

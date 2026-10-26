@@ -198,11 +198,50 @@
           </div>
         </section>
 
-        <section class="streak-panel" aria-label="Study streak">
-          <div class="streak-icon" aria-hidden="true">火</div>
-          <div class="streak-copy"><p class="eyebrow">YOUR RHYTHM</p><strong>0 day streak</strong><span>Start your first study session today.</span></div>
-          <span class="streak-status">READY WHEN YOU ARE</span>
+        @if (overviewStatsError) {
+          <div class="error-banner" role="alert"><span>{{ overviewStatsError }}</span><button type="button" (click)="loadOverviewStats()">Try again</button></div>
+        }
+        <section class="overview-stat-grid" aria-label="Flashcard overview">
+          <article class="overview-stat-card"><span class="overview-stat-icon">▤</span><span class="overview-stat-label">ALL FLASHCARDS</span><strong>{{ overviewStatsLoading ? '—' : (overviewStats?.totalCards ?? 0) }}</strong><small>Across your library</small></article>
+          <article class="overview-stat-card overview-stat-due"><span class="overview-stat-icon">◷</span><span class="overview-stat-label">DUE TODAY</span><strong>{{ overviewStatsLoading ? '—' : (overviewStats?.dueToday ?? 0) }}</strong><small>Ready for review now</small></article>
+          <article class="overview-stat-card overview-stat-mastered"><span class="overview-stat-icon">✓</span><span class="overview-stat-label">MASTERED</span><strong>{{ overviewStatsLoading ? '—' : (overviewStats?.masteredCards ?? 0) }}</strong><small>Graduated to FSRS review</small></article>
         </section>
+
+        @if (overviewStats; as stats) {
+          <section class="overview-analytics" aria-label="Study activity and upcoming reviews">
+            <article class="overview-panel activity-panel">
+              <div class="overview-panel-heading"><div><p class="eyebrow">YOUR PRACTICE</p><h2>Review activity</h2></div><span class="panel-period">Last 7 days</span></div>
+              @if (!hasReviewActivity(stats)) {
+                <p class="chart-empty">Your completed reviews will appear here.</p>
+              } @else {
+                <div class="activity-chart" role="img" [attr.aria-label]="activityChartLabel(stats)">
+                  @for (day of stats.activity; track day.date) {
+                    <div class="activity-day">
+                      <span class="activity-value">{{ day.reviews || '' }}</span>
+                      <div class="activity-bar-track"><span class="activity-bar" [class.activity-bar-today]="day.date === stats.today" [style.height.%]="activityBarHeight(day.reviews)"></span></div>
+                      <small>{{ dashboardDayLabel(day.date) }}</small>
+                    </div>
+                  }
+                </div>
+              }
+              <p class="panel-footnote">Reviews saved in your FSRS history</p>
+            </article>
+
+            <article class="overview-panel forecast-panel">
+              <div class="overview-panel-heading"><div><p class="eyebrow">FSRS SCHEDULE</p><h2>Coming up</h2></div><span class="panel-period">Next 3 days</span></div>
+              <div class="forecast-list">
+                @for (day of stats.upcoming; track day.date) {
+                  <div class="forecast-day">
+                    <div class="forecast-date"><strong>{{ forecastDayLabel(day.date) }}</strong><small>{{ dashboardDateLabel(day.date) }}</small></div>
+                    <div class="forecast-bar-track"><span class="forecast-bar" [style.width.%]="forecastBarWidth(day.cards)"></span></div>
+                    <strong class="forecast-count">{{ day.cards }}</strong>
+                  </div>
+                }
+              </div>
+              <p class="panel-footnote">Based on each card’s current due date</p>
+            </article>
+          </section>
+        }
 
         <section id="deck-library" class="section-heading">
           <div><p class="eyebrow">YOUR LEARNING SPACE</p><h2>Ready when you are</h2></div>
@@ -220,10 +259,7 @@
                   <span class="deck-card-count">{{ deckItem.cardCount }} {{ deckItem.cardCount === 1 ? 'card' : 'cards' }}</span>
                   <strong>{{ deckItem.name }}</strong>
                   <span class="deck-description">{{ deckItem.description || 'A little space for new words.' }}</span>
-                  <span class="deck-progress-label"><span>Mastered</span><span>0%</span></span>
-                  <span class="deck-progress"><span></span></span>
                 </button>
-                <div class="deck-metrics"><span><i class="metric-new"></i>New <strong>{{ deckItem.cardCount }}</strong></span><span><i class="metric-review"></i>Review <strong>0</strong></span></div>
                 <div class="deck-actions">
                   <button class="study-button" type="button" [disabled]="deckItem.cardCount === 0" (click)="startStudy(deckItem, $event)">Study <span aria-hidden="true">→</span></button>
                   <button type="button" (click)="editDeck(deckItem, $event)">Edit</button>
