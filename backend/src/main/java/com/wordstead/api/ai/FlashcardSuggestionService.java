@@ -39,9 +39,17 @@ public class FlashcardSuggestionService {
         this.restClient = RestClient.builder().requestFactory(requestFactory).build();
         this.objectMapper = objectMapper;
         this.apiKey = apiKey;
-        this.model = model;
+        this.model = normalizeModel(model);
     }
 
+    private String normalizeModel(String configuredModel) {
+        String normalized = configuredModel == null ? "" : configuredModel.trim();
+        if (normalized.length() >= 2 && ((normalized.startsWith("\"") && normalized.endsWith("\""))
+                || (normalized.startsWith("'") && normalized.endsWith("'")))) {
+            normalized = normalized.substring(1, normalized.length() - 1).trim();
+        }
+        return normalized.isBlank() ? "gemini-2.5-flash" : normalized;
+    }
     public FlashcardSuggestionResponse suggest(String rawWord) {
         if (apiKey.isBlank()) {
             throw new FlashcardSuggestionException(SERVICE_UNAVAILABLE,
