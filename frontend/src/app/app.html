@@ -50,6 +50,23 @@
           <button type="button" aria-label="Dismiss message" (click)="notice = ''">×</button>
         </div>
       }
+      @if (backgroundSuggestionCardIds.size > 0) {
+        <div class="notice" role="status">
+          <span>AI is completing details for {{ backgroundSuggestionCardIds.size }} saved card(s) in the background. You can keep adding cards.</span>
+        </div>
+      }
+      @if (backgroundSuggestionMessage && backgroundSuggestionCardIds.size === 0) {
+        <div class="notice" role="status">
+          <span>{{ backgroundSuggestionMessage }}</span>
+          <button type="button" aria-label="Dismiss message" (click)="backgroundSuggestionMessage = ''">×</button>
+        </div>
+      }
+      @if (backgroundSuggestionError) {
+        <div class="error-banner" role="alert">
+          <span>{{ backgroundSuggestionError }}</span>
+          <button type="button" aria-label="Dismiss message" (click)="backgroundSuggestionError = ''">×</button>
+        </div>
+      }
       @if (loadError) {
         <div class="error-banner" role="alert">
           <span>{{ loadError }}</span>
@@ -132,7 +149,16 @@
                   <div class="flashcard-sides">
                     <div><span class="field-label">FRONT</span><h3>{{ card.front }}</h3></div>
                     <span class="side-arrow" aria-hidden="true">→</span>
-                    <div><span class="field-label">BACK</span><p class="card-back-text">{{ card.back }}</p></div>
+                    <div>
+                      <span class="field-label">BACK</span>
+                      @if (card.back.trim()) {
+                        <p class="card-back-text">{{ card.back }}</p>
+                      } @else if (backgroundSuggestionCardIds.has(card.id)) {
+                        <p class="card-back-pending">AI translation in progress…</p>
+                      } @else {
+                        <p class="card-back-pending">Translation not added yet</p>
+                      }
+                    </div>
                   </div>
                   @if (card.example) { <p class="card-example">“{{ card.example }}”</p> }
                   @if (card.mnemonic) { <p class="card-extra"><span>✳</span> {{ card.mnemonic }}</p> }
@@ -262,8 +288,8 @@
             <textarea id="card-front" name="front" [(ngModel)]="cardForm.front" (ngModelChange)="onCardFrontChange($event)" maxlength="1000" rows="2" required placeholder="to board"></textarea>
           </div>
           <div>
-            <label for="card-back">Back <span>Meaning or answer</span></label>
-            <textarea id="card-back" name="back" [(ngModel)]="cardForm.back" maxlength="2000" rows="2" required placeholder="wsiadać"></textarea>
+            <label for="card-back">Back <span>{{ editingCardId ? 'Meaning or answer' : 'Optional — AI can fill this in' }}</span></label>
+            <textarea id="card-back" name="back" [(ngModel)]="cardForm.back" maxlength="2000" rows="2" [required]="editingCardId !== null" placeholder="wsiadać"></textarea>
           </div>
         </div>
         <label for="card-example">Example <span>Optional</span></label>
@@ -273,7 +299,7 @@
         @if (!editingCardId) {
           <div class="ai-suggestion-row">
             <span class="ai-suggestion-indicator" [class.is-loading]="suggestionLoading" aria-hidden="true">✦</span>
-            <small aria-live="polite">{{ suggestionLoading ? 'Generating translation and study hints…' : 'Translation, example, and mnemonic are generated automatically.' }}</small>
+            <small aria-live="polite">{{ suggestionLoading ? 'Generating translation and study hints… You can add this card now.' : 'Add the word now; AI can fill in its translation and study hints in the background.' }}</small>
           </div>
         }
         @if (suggestionError) { <p class="form-error" role="alert">{{ suggestionError }}</p> }
@@ -282,7 +308,7 @@
         @if (loadError) { <p class="form-error" role="alert">{{ loadError }}</p> }
         <div class="modal-actions">
           <button class="secondary-button" type="button" (click)="closeForms()">Cancel</button>
-          <button class="primary-button" type="submit" [disabled]="saving || !cardForm.front.trim() || !cardForm.back.trim()">{{ saving ? 'Saving…' : (editingCardId ? 'Save changes' : 'Add card') }}</button>
+          <button class="primary-button" type="submit" [disabled]="saving || !cardForm.front.trim() || (editingCardId !== null && !cardForm.back.trim())">{{ saving ? 'Saving…' : (editingCardId ? 'Save changes' : 'Add card') }}</button>
         </div>
       </form>
     </section>

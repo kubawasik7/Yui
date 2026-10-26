@@ -46,7 +46,7 @@ public class CardController {
     @PostMapping
     public ResponseEntity<CardResponse> create(
             @PathVariable UUID deckId,
-            @Valid @RequestBody CardRequest request) {
+            @Valid @RequestBody CardCreateRequest request) {
         CardResponse created = cardService.create(deckId, request);
         return ResponseEntity.created(URI.create("/api/decks/" + deckId + "/cards/" + created.id())).body(created);
     }

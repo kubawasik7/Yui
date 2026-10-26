@@ -93,6 +93,33 @@ class CardControllerTest {
     }
 
     @Test
+    void cardCanBeSavedBeforeItsTranslationIsReady() throws Exception {
+        UUID deckId = deckRepository.save(new Deck("Travel", null)).getId();
+        HttpResponse<String> response = request("POST", "/api/decks/" + deckId + "/cards",
+                "{\"front\":\"incentive\",\"back\":\"\"}");
+
+        assertEquals(201, response.statusCode());
+        assertTrue(response.body().contains("\"front\":\"incentive\""));
+        assertTrue(response.body().contains("\"back\":\"\""));
+        assertEquals(1, cardRepository.count());
+    }
+
+    @Test
+    void updatingAnExistingCardStillRequiresATranslation() throws Exception {
+        UUID deckId = deckRepository.save(new Deck("Travel", null)).getId();
+        String cardsPath = "/api/decks/" + deckId + "/cards";
+        HttpResponse<String> created = request("POST", cardsPath,
+                "{\"front\":\"board\",\"back\":\"wsiadać\"}");
+        UUID cardId = extractId(created.body());
+
+        HttpResponse<String> update = request("PUT", cardsPath + "/" + cardId,
+                "{\"front\":\"board\",\"back\":\"\"}");
+
+        assertEquals(400, update.statusCode());
+        assertEquals("wsiadać", cardRepository.findById(cardId).orElseThrow().getBack());
+    }
+
+    @Test
     void reviewIsPersistedIdempotentlyAndRemovesCardFromDueQueue() throws Exception {
         UUID deckId = deckRepository.save(new Deck("Travel", null)).getId();
         String cardsPath = "/api/decks/" + deckId + "/cards";

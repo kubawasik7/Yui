@@ -34,7 +34,7 @@ public class CardService {
         return CardResponse.from(findCard(deckId, cardId));
     }
 
-    public CardResponse create(UUID deckId, CardRequest request) {
+    public CardResponse create(UUID deckId, CardCreateRequest request) {
         Deck deck = requireDeck(deckId);
         Flashcard card = new Flashcard(
                 deck,

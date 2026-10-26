@@ -96,6 +96,10 @@ export class FlashcardApiService {
     return this.http.get<Flashcard[]>(`${this.baseUrl}/decks/${deckId}/cards`, { params });
   }
 
+  getCard(deckId: string, cardId: string): Observable<Flashcard> {
+    return this.http.get<Flashcard>(`${this.baseUrl}/decks/${deckId}/cards/${cardId}`);
+  }
+
   submitReview(deckId: string, cardId: string, input: ReviewInput): Observable<ReviewResult> {
     return this.http.post<ReviewResult>(`${this.baseUrl}/decks/${deckId}/cards/${cardId}/reviews`, input);
   }

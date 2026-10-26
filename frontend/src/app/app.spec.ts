@@ -66,11 +66,12 @@ describe('App', () => {
     app.cardForm.front = 'to board';
     app.cardForm.back = 'wsiadać';
     app.cardForm.example = 'We board at gate 4.';
+    app.cardForm.mnemonic = 'board sounds like a board at the gate';
     app.saveCard();
 
     const card: Flashcard = {
       id: 'card-1', deckId: deck.id, front: 'to board', back: 'wsiadać',
-      example: 'We board at gate 4.', mnemonic: null, notes: null,
+      example: 'We board at gate 4.', mnemonic: 'board sounds like a board at the gate', notes: null,
       state: 'LEARNING', stability: null, difficulty: null, dueAt: '2026-10-23T10:00:00Z',
       lastReviewAt: null, reviewCount: 0, lapseCount: 0,
       createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
@@ -84,6 +85,78 @@ describe('App', () => {
     expect(app.selectedDeck?.id).toBe(deck.id);
     expect(app.loadingDecks).toBe(false);
     expect(app.cards).toHaveLength(1);
+  });
+
+  it('saves a word immediately and fills its translation in the background while another card is added', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    httpTesting.expectOne('/api/decks').flush([]);
+
+    const deck: Deck = {
+      id: 'deck-1', name: 'Travel English', description: null, cardCount: 0, desiredRetention: 0.9,
+      createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
+    };
+    const app = fixture.componentInstance;
+    app.openDeck(deck);
+    httpTesting.expectOne('/api/decks/deck-1/cards').flush([]);
+    app.createCard();
+    app.cardForm.front = 'incentive';
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('.card-modal button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
+
+    app.saveCard();
+    const firstCreate = httpTesting.expectOne('/api/decks/deck-1/cards');
+    expect(firstCreate.request.method).toBe('POST');
+    expect(firstCreate.request.body.back).toBe('');
+    const firstCard: Flashcard = {
+      id: 'card-1', deckId: deck.id, front: 'incentive', back: '', example: null,
+      mnemonic: null, notes: null, state: 'LEARNING', stability: null, difficulty: null,
+      dueAt: '2026-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
+      createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
+    };
+    firstCreate.flush(firstCard);
+    httpTesting.expectOne('/api/decks/deck-1/cards').flush([firstCard]);
+    httpTesting.expectOne('/api/decks').flush([{ ...deck, cardCount: 1 }]);
+    const firstSuggestion = httpTesting.expectOne('/api/ai/flashcard-suggestions');
+    expect(firstSuggestion.request.body).toEqual({ word: 'incentive' });
+    expect(app.cardFormOpen).toBe(false);
+    expect(app.cardForm.front).toBe('');
+    expect(app.backgroundSuggestionCardIds.has(firstCard.id)).toBe(true);
+
+    app.createCard();
+    app.cardForm.front = 'motivation';
+    app.cardForm.back = 'motywacja';
+    app.cardForm.example = 'Motivation helps us learn.';
+    app.cardForm.mnemonic = 'motion creates motivation';
+    app.saveCard();
+    const secondCreate = httpTesting.expectOne('/api/decks/deck-1/cards');
+    expect(secondCreate.request.method).toBe('POST');
+    const secondCard: Flashcard = {
+      ...firstCard, id: 'card-2', front: 'motivation', back: 'motywacja',
+      example: 'Motivation helps us learn.', mnemonic: 'motion creates motivation'
+    };
+    secondCreate.flush(secondCard);
+    httpTesting.expectOne('/api/decks/deck-1/cards').flush([firstCard, secondCard]);
+    httpTesting.expectOne('/api/decks').flush([{ ...deck, cardCount: 2 }]);
+    expect(app.backgroundSuggestionCardIds.has(firstCard.id)).toBe(true);
+
+    firstSuggestion.flush({
+      translation: 'zachęta', example: 'The reward was an incentive to study.', mnemonic: 'An incentive invites you in.'
+    });
+    const readFirstCard = httpTesting.expectOne('/api/decks/deck-1/cards/card-1');
+    expect(readFirstCard.request.method).toBe('GET');
+    readFirstCard.flush(firstCard);
+    const updateFirstCard = httpTesting.expectOne('/api/decks/deck-1/cards/card-1');
+    expect(updateFirstCard.request.method).toBe('PUT');
+    expect(updateFirstCard.request.body).toEqual({
+      front: 'incentive', back: 'zachęta', example: 'The reward was an incentive to study.',
+      mnemonic: 'An incentive invites you in.', notes: null
+    });
+    updateFirstCard.flush({ ...firstCard, back: 'zachęta', example: 'The reward was an incentive to study.', mnemonic: 'An incentive invites you in.' });
+
+    expect(app.backgroundSuggestionCardIds.has(firstCard.id)).toBe(false);
+    expect(app.cards.find((card) => card.id === firstCard.id)?.back).toBe('zachęta');
+    expect(app.backgroundSuggestionMessage).toContain('incentive');
   });
 
   it('starts a session from due cards only', () => {

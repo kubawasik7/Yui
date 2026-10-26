@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Subscription, finalize, timeout } from 'rxjs';
+import { Subscription, finalize, of, switchMap, timeout } from 'rxjs';
 import {
   Deck,
   Flashcard,
@@ -54,8 +54,12 @@ export class App implements OnInit, OnDestroy {
   deleteCardError = '';
   suggestionLoading = false;
   suggestionError = '';
+  readonly backgroundSuggestionCardIds = new Set<string>();
+  backgroundSuggestionMessage = '';
+  backgroundSuggestionError = '';
   private suggestionTimer: ReturnType<typeof setTimeout> | null = null;
   private suggestionRequest: Subscription | null = null;
+  private readonly backgroundSuggestionRequests = new Map<string, Subscription>();
   private lastAppliedSuggestion: Partial<FlashcardSuggestion> | null = null;
 
   ngOnInit(): void {
@@ -64,6 +68,8 @@ export class App implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.cancelPendingSuggestion();
+    for (const request of this.backgroundSuggestionRequests.values()) request.unsubscribe();
+    this.backgroundSuggestionRequests.clear();
   }
 
   get totalCards(): number {
@@ -415,7 +421,9 @@ export class App implements OnInit, OnDestroy {
   }
 
   saveCard(): void {
-    if (!this.selectedDeck || !this.cardForm.front.trim() || !this.cardForm.back.trim() || this.saving) return;
+    const creating = this.editingCardId === null;
+    if (!this.selectedDeck || !this.cardForm.front.trim() || this.saving || (!creating && !this.cardForm.back.trim())) return;
+    const deckId = this.selectedDeck.id;
     const input: FlashcardInput = {
       front: this.cardForm.front.trim(),
       back: this.cardForm.back.trim(),
@@ -424,9 +432,10 @@ export class App implements OnInit, OnDestroy {
       notes: this.cardForm.notes?.trim() || null
     };
     const request = this.editingCardId
-      ? this.api.updateCard(this.selectedDeck.id, this.editingCardId, input)
-      : this.api.createCard(this.selectedDeck.id, input);
+      ? this.api.updateCard(deckId, this.editingCardId, input)
+      : this.api.createCard(deckId, input);
 
+    this.cancelPendingSuggestion();
     this.saving = true;
     request.pipe(
       timeout({ first: 30_000 }),
@@ -435,8 +444,8 @@ export class App implements OnInit, OnDestroy {
         this.changeDetector.markForCheck();
       })
     ).subscribe({
-      next: () => {
-        const wasCreating = this.editingCardId === null;
+      next: (savedCard) => {
+        const wasCreating = creating;
         this.cancelPendingSuggestion();
         this.cardFormOpen = false;
         this.cardForm = this.emptyCard();
@@ -446,6 +455,9 @@ export class App implements OnInit, OnDestroy {
         if (wasCreating) this.searchQuery = '';
         this.loadCards();
         this.loadDecks();
+        if (wasCreating && (!input.back || !input.example || !input.mnemonic)) {
+          this.startBackgroundSuggestion(deckId, savedCard, input.front);
+        }
         this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
@@ -453,6 +465,58 @@ export class App implements OnInit, OnDestroy {
         this.changeDetector.markForCheck();
       }
     });
+  }
+
+  private startBackgroundSuggestion(deckId: string, savedCard: Flashcard, word: string): void {
+    if (savedCard.back.trim() && savedCard.example?.trim() && savedCard.mnemonic?.trim()) return;
+
+    this.backgroundSuggestionCardIds.add(savedCard.id);
+    this.backgroundSuggestionMessage = '';
+    this.backgroundSuggestionError = '';
+    this.changeDetector.markForCheck();
+
+    const request = this.api.suggestFlashcard(word).pipe(
+      timeout({ first: 30_000 }),
+      switchMap((suggestion) => this.api.getCard(deckId, savedCard.id).pipe(
+        timeout({ first: 10_000 }),
+        switchMap((currentCard) => {
+          const input: FlashcardInput = {
+            front: currentCard.front,
+            back: currentCard.back.trim() ? currentCard.back : suggestion.translation,
+            example: currentCard.example?.trim() ? currentCard.example : suggestion.example,
+            mnemonic: currentCard.mnemonic?.trim() ? currentCard.mnemonic : suggestion.mnemonic,
+            notes: currentCard.notes
+          };
+          const changed = input.back !== currentCard.back
+            || input.example !== currentCard.example
+            || input.mnemonic !== currentCard.mnemonic;
+          return changed
+            ? this.api.updateCard(deckId, savedCard.id, input).pipe(timeout({ first: 10_000 }))
+            : of(currentCard);
+        })
+      )),
+      finalize(() => {
+        this.backgroundSuggestionCardIds.delete(savedCard.id);
+        this.backgroundSuggestionRequests.delete(savedCard.id);
+        this.changeDetector.markForCheck();
+      })
+    ).subscribe({
+      next: (updatedCard) => {
+        const cardIndex = this.cards.findIndex((card) => card.id === updatedCard.id);
+        if (cardIndex >= 0) this.cards[cardIndex] = updatedCard;
+        if (this.backgroundSuggestionCardIds.size === 1) {
+          this.backgroundSuggestionMessage = `AI finished the translation and study hints for “${word}”.`;
+        }
+        this.changeDetector.markForCheck();
+      },
+      error: (error: unknown) => {
+        if (!(error instanceof HttpErrorResponse && error.status === 404)) {
+          this.backgroundSuggestionError = `“${word}” was saved, but AI could not add its details. You can edit the card to fill them in.`;
+        }
+        this.changeDetector.markForCheck();
+      }
+    });
+    this.backgroundSuggestionRequests.set(savedCard.id, request);
   }
 
   deleteCard(card: Flashcard): void {
