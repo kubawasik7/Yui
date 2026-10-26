@@ -48,8 +48,12 @@ public class FlashcardSuggestionService {
                 || (normalized.startsWith("'") && normalized.endsWith("'")))) {
             normalized = normalized.substring(1, normalized.length() - 1).trim();
         }
+        if (normalized.startsWith("models/")) {
+            normalized = normalized.substring("models/".length());
+        }
         return normalized.isBlank() ? "gemini-2.5-flash" : normalized;
     }
+
     public FlashcardSuggestionResponse suggest(String rawWord) {
         if (apiKey.isBlank()) {
             throw new FlashcardSuggestionException(SERVICE_UNAVAILABLE,
@@ -89,7 +93,8 @@ public class FlashcardSuggestionService {
             return "Gemini rejected the API key or the key does not have access to this model. Check GEMINI_API_KEY.";
         }
         if (status == 404) {
-            return "The configured Gemini model was not found. Check GEMINI_MODEL.";
+            return "Gemini returned 404 for the configured model. Set GEMINI_MODEL to gemini-2.5-flash "
+                    + "without a 'models/' prefix, then fully restart the backend.";
         }
         if (status == 429) {
             return "Gemini request quota or rate limit was reached. Check the Google AI Studio project quota.";
