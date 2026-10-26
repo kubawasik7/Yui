@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { Component, HostListener, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { finalize, timeout } from 'rxjs';
 import {
   Deck,
   Flashcard,
@@ -246,17 +247,23 @@ export class App implements OnInit {
       : this.api.createCard(this.selectedDeck.id, input);
 
     this.saving = true;
-    request.subscribe({
+    request.pipe(
+      timeout({ first: 30_000 }),
+      finalize(() => this.saving = false)
+    ).subscribe({
       next: () => {
+        const wasCreating = this.editingCardId === null;
         this.cardFormOpen = false;
-        this.saving = false;
-        this.notice = this.editingCardId ? 'Card updated.' : 'Card added.';
+        this.cardForm = this.emptyCard();
+        this.editingCardId = null;
+        this.loadError = '';
+        this.notice = '';
+        if (wasCreating) this.searchQuery = '';
         this.loadCards();
         this.loadDecks();
       },
       error: (error: unknown) => {
         this.loadError = this.errorMessage(error, 'The card could not be saved.');
-        this.saving = false;
       }
     });
   }
