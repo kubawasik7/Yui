@@ -42,6 +42,9 @@ export class App implements OnInit {
   cardFormOpen = false;
   editingCardId: string | null = null;
   cardForm: FlashcardInput = this.emptyCard();
+  cardToDelete: Flashcard | null = null;
+  deletingCard = false;
+  deleteCardError = '';
 
   ngOnInit(): void {
     this.loadDecks();
@@ -99,6 +102,10 @@ export class App implements OnInit {
 
   @HostListener('window:keydown', ['$event'])
   onStudyKeydown(event: KeyboardEvent): void {
+    if (event.code === 'Escape' && this.cardToDelete && !this.deletingCard) {
+      this.cancelCardDelete();
+      return;
+    }
     if (!this.studyMode || event.code !== 'Space' || event.repeat) return;
     const target = event.target;
     if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'BUTTON'].includes(target.tagName))) return;
@@ -287,16 +294,33 @@ export class App implements OnInit {
   }
 
   deleteCard(card: Flashcard): void {
-    if (!this.selectedDeck || !window.confirm(`Delete “${card.front}”?`)) return;
+    this.cardToDelete = card;
+    this.deleteCardError = '';
+  }
+
+  cancelCardDelete(): void {
+    if (this.deletingCard) return;
+    this.cardToDelete = null;
+    this.deleteCardError = '';
+  }
+
+  confirmDeleteCard(): void {
+    if (!this.selectedDeck || !this.cardToDelete || this.deletingCard) return;
+    const card = this.cardToDelete;
+    this.deletingCard = true;
+    this.deleteCardError = '';
     this.api.deleteCard(this.selectedDeck.id, card.id).subscribe({
       next: () => {
+        this.cardToDelete = null;
+        this.deletingCard = false;
         this.notice = 'Card deleted.';
         this.loadCards();
         this.loadDecks();
         this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
-        this.loadError = this.errorMessage(error, 'The card could not be deleted.');
+        this.deleteCardError = this.errorMessage(error, 'The card could not be deleted.');
+        this.deletingCard = false;
         this.changeDetector.markForCheck();
       }
     });

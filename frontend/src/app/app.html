@@ -268,3 +268,27 @@
     </section>
   </div>
 }
+
+@if (cardToDelete; as card) {
+  <div class="modal-backdrop confirm-backdrop" (click)="cancelCardDelete()">
+    <section class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-card-title" aria-describedby="delete-card-description" (click)="$event.stopPropagation()">
+      <div class="confirm-mark" aria-hidden="true">×</div>
+      <p class="eyebrow">REMOVE FROM YOUR DECK</p>
+      <h2 id="delete-card-title">Delete this card?</h2>
+      <p id="delete-card-description" class="confirm-description">This will permanently remove the card from <strong>{{ selectedDeck?.name }}</strong>.</p>
+      <div class="confirm-card-preview">
+        <span class="field-label">FRONT</span>
+        <strong>{{ card.front }}</strong>
+        <span class="confirm-preview-divider"></span>
+        <span class="field-label">BACK</span>
+        <span class="confirm-card-back">{{ card.back }}</span>
+      </div>
+      @if (deleteCardError) { <p class="form-error" role="alert">{{ deleteCardError }}</p> }
+      <div class="confirm-actions">
+        <button class="secondary-button" type="button" [disabled]="deletingCard" (click)="cancelCardDelete()">Keep card</button>
+        <button class="danger-button" type="button" [disabled]="deletingCard" (click)="confirmDeleteCard()">{{ deletingCard ? 'Deleting…' : 'Delete card' }}</button>
+      </div>
+      <p class="confirm-footnote"><span aria-hidden="true">結</span> This action cannot be undone.</p>
+    </section>
+  </div>
+}
