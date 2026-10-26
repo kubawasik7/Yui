@@ -450,6 +450,11 @@ export class App implements OnInit {
   private errorMessage(error: unknown, fallback: string): string {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 0) return 'Cannot reach the API. Start the backend and try again.';
+      if (error.status === 503) return 'AI is not configured. Set GEMINI_API_KEY in the IntelliJ run configuration and restart the backend.';
+      if (error.status === 502) {
+        const aiDetail = error.error?.detail ?? error.error?.message;
+        return typeof aiDetail === 'string' ? aiDetail : 'Gemini could not generate suggestions. Check the key, model, quota, and backend log.';
+      }
       const message = error.error?.detail ?? error.error?.message;
       if (typeof message === 'string') return message;
     }

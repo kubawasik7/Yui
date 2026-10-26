@@ -2,11 +2,14 @@ package com.wordstead.api.ai;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -17,6 +20,7 @@ import static org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
 
 @Service
 public class FlashcardSuggestionService {
+    private static final Logger log = LoggerFactory.getLogger(FlashcardSuggestionService.class);
     private static final String GEMINI_ENDPOINT =
             "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent";
 
@@ -57,10 +61,32 @@ public class FlashcardSuggestionService {
                     .retrieve()
                     .body(JsonNode.class);
             return parseResponse(response);
+        } catch (RestClientResponseException exception) {
+            int status = exception.getStatusCode().value();
+            log.warn("Gemini API request failed with HTTP status {}", status);
+            throw new ResponseStatusException(BAD_GATEWAY, providerErrorMessage(status));
         } catch (RestClientException exception) {
+            log.warn("Gemini API request failed before receiving an HTTP response ({})",
+                    exception.getClass().getSimpleName());
             throw new ResponseStatusException(BAD_GATEWAY,
-                    "Gemini could not generate flashcard suggestions. Check the backend Gemini configuration and try again.");
+                    "Could not connect to Gemini. Check the backend network connection and try again.");
         }
+    }
+
+    private String providerErrorMessage(int status) {
+        if (status == 401 || status == 403) {
+            return "Gemini rejected the API key or the key does not have access to this model. Check GEMINI_API_KEY.";
+        }
+        if (status == 404) {
+            return "The configured Gemini model was not found. Check GEMINI_MODEL.";
+        }
+        if (status == 429) {
+            return "Gemini request quota or rate limit was reached. Check the Google AI Studio project quota.";
+        }
+        if (status >= 500) {
+            return "Gemini is temporarily unavailable. Try again later.";
+        }
+        return "Gemini rejected the request with HTTP status " + status + ". Check the backend configuration.";
     }
 
     private FlashcardSuggestionResponse parseResponse(JsonNode response) {
