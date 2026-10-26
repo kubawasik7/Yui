@@ -45,6 +45,12 @@ export interface FlashcardInput {
   notes: string | null;
 }
 
+export interface FlashcardSuggestion {
+  translation: string;
+  example: string;
+  mnemonic: string;
+}
+
 export type ReviewAnswer = 'REMEMBERED' | 'NOT_REMEMBERED';
 
 export interface ReviewInput {
@@ -96,6 +102,10 @@ export class FlashcardApiService {
 
   createCard(deckId: string, input: FlashcardInput): Observable<Flashcard> {
     return this.http.post<Flashcard>(`${this.baseUrl}/decks/${deckId}/cards`, input);
+  }
+
+  suggestFlashcard(word: string): Observable<FlashcardSuggestion> {
+    return this.http.post<FlashcardSuggestion>(`${this.baseUrl}/ai/flashcard-suggestions`, { word });
   }
 
   updateCard(deckId: string, cardId: string, input: FlashcardInput): Observable<Flashcard> {

@@ -55,3 +55,5 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .rating-button:focus-visible { outline: 3px solid #e6e8ec; outline-offset: 3px; }
 .rating-again { border-color: #e63946a6; background: #e639461f; }
 .rating-good { border-color: #00f5d48c; background: #00f5d41a; }
+.ai-suggestion-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.ai-suggestion-row small { color: var(--muted); font-size: 9px; line-height: 1.45; }

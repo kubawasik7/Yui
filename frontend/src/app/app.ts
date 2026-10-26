@@ -8,6 +8,7 @@ import {
   Flashcard,
   FlashcardApiService,
   FlashcardInput,
+  FlashcardSuggestion,
   ReviewAnswer
 } from './flashcard-api.service';
 
@@ -51,6 +52,8 @@ export class App implements OnInit {
   cardToDelete: Flashcard | null = null;
   deletingCard = false;
   deleteCardError = '';
+  suggestionLoading = false;
+  suggestionError = '';
 
   ngOnInit(): void {
     this.loadDecks();
@@ -314,6 +317,7 @@ export class App implements OnInit {
     this.editingCardId = null;
     this.cardForm = this.emptyCard();
     this.cardFormOpen = true;
+    this.suggestionError = '';
     this.notice = '';
     this.loadError = '';
   }
@@ -328,8 +332,36 @@ export class App implements OnInit {
       notes: card.notes ?? ''
     };
     this.cardFormOpen = true;
+    this.suggestionError = '';
     this.notice = '';
     this.loadError = '';
+  }
+
+  suggestCardDetails(): void {
+    const word = this.cardForm.front.trim();
+    if (!word || this.editingCardId || this.suggestionLoading) return;
+
+    this.suggestionLoading = true;
+    this.suggestionError = '';
+    this.api.suggestFlashcard(word).pipe(
+      timeout({ first: 30_000 }),
+      finalize(() => {
+        this.suggestionLoading = false;
+        this.changeDetector.markForCheck();
+      })
+    ).subscribe({
+      next: (suggestion: FlashcardSuggestion) => {
+        if (this.cardForm.front.trim() !== word) return;
+        if (!this.cardForm.back.trim()) this.cardForm.back = suggestion.translation;
+        if (!this.cardForm.example?.trim()) this.cardForm.example = suggestion.example;
+        if (!this.cardForm.mnemonic?.trim()) this.cardForm.mnemonic = suggestion.mnemonic;
+        this.changeDetector.markForCheck();
+      },
+      error: (error: unknown) => {
+        this.suggestionError = this.errorMessage(error, 'AI suggestions could not be generated.');
+        this.changeDetector.markForCheck();
+      }
+    });
   }
 
   saveCard(): void {
@@ -408,6 +440,7 @@ export class App implements OnInit {
   closeForms(): void {
     this.deckFormOpen = false;
     this.cardFormOpen = false;
+    this.suggestionError = '';
   }
 
   private emptyCard(): FlashcardInput {

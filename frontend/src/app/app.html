@@ -259,7 +259,7 @@
         <div class="form-columns">
           <div>
             <label for="card-front">Front <span>Word or question</span></label>
-            <textarea id="card-front" name="front" [(ngModel)]="cardForm.front" maxlength="1000" rows="2" required placeholder="to board"></textarea>
+            <textarea id="card-front" name="front" [(ngModel)]="cardForm.front" (blur)="suggestCardDetails()" maxlength="1000" rows="2" required placeholder="to board"></textarea>
           </div>
           <div>
             <label for="card-back">Back <span>Meaning or answer</span></label>
@@ -270,6 +270,15 @@
         <textarea id="card-example" name="example" [(ngModel)]="cardForm.example" maxlength="2000" rows="2" placeholder="We board at gate 4."></textarea>
         <label for="card-mnemonic">Memory association <span>Optional</span></label>
         <input id="card-mnemonic" name="mnemonic" [(ngModel)]="cardForm.mnemonic" maxlength="1000" placeholder="A hint that helps you remember" />
+        @if (!editingCardId) {
+          <div class="ai-suggestion-row">
+            <button class="secondary-button" type="button" [disabled]="suggestionLoading || !cardForm.front.trim()" (click)="suggestCardDetails()">
+              {{ suggestionLoading ? 'Generating…' : '✦ Generate with AI' }}
+            </button>
+            <small>Suggestions are generated when you leave the word field. Existing text is preserved.</small>
+          </div>
+        }
+        @if (suggestionError) { <p class="form-error" role="alert">{{ suggestionError }}</p> }
         <label for="card-notes">Notes <span>Optional</span></label>
         <textarea id="card-notes" name="notes" [(ngModel)]="cardForm.notes" maxlength="5000" rows="2" placeholder="Extra context"></textarea>
         @if (loadError) { <p class="form-error" role="alert">{{ loadError }}</p> }

@@ -1,6 +1,6 @@
 # Yui
 
-Yui is a desktop-first flashcard app for language learning. The repository contains an Angular frontend and a Spring Boot REST API with PostgreSQL persistence for decks and flashcards. Study scheduling and AI generation are planned work.
+Yui is a desktop-first flashcard app for language learning. The repository contains an Angular frontend and a Spring Boot REST API with PostgreSQL persistence for decks and flashcards. Study scheduling uses FSRS-6, and Gemini can suggest Polish translations, English examples, and Polish mnemonics while creating a card.
 
 ## Requirements
 
@@ -49,6 +49,14 @@ try {
 If you prefer Docker Compose instead of the installed PostgreSQL service, copy `.env.example` to `.env` and run `docker compose up -d database` from the repository root. Do not run both database setups on the same port.
 
 The API starts on port `8080`. Check `http://localhost:8080/api/health`; it should return `{"status":"UP","service":"yui-api"}`. Run the backend integration tests with `mvn test` from `backend/`.
+
+### Gemini flashcard suggestions
+
+The card form asks the backend for suggestions when you leave the English word field. You can also request them with **Generate with AI**. Suggestions fill only blank translation, example, and mnemonic fields, so text you have already entered is preserved. The app uses the Gemini `gemini-3.8-flash` model by default and sends requests from Spring Boot; the browser never receives the API key.
+
+Set `GEMINI_API_KEY` in the IntelliJ run configuration environment variables for `YuiApiApplication`. Optionally set `GEMINI_MODEL` to another model available to your Google AI Studio project. For PowerShell, set the variable in the current session before starting Maven: `$env:GEMINI_API_KEY = 'your-new-key'`. Do not commit local credentials. The API key that was pasted into the chat should be revoked and replaced before use.
+
+The backend endpoint is `POST /api/ai/flashcard-suggestions` with `{"word":"serendipity"}`; it returns `translation`, `example`, and `mnemonic` strings. Gemini credentials are configured with `GEMINI_API_KEY` and are not needed when using the rest of the app without AI.
 
 Deck endpoints:
 
@@ -101,7 +109,7 @@ The API schedules reviews with FSRS-6 using the official default 21 parameters, 
 
 ## Proposed MVP architecture
 
-The first release will use one Angular single-page application and one Spring Boot REST API. PostgreSQL stores decks and cards; migrations are managed by Flyway and database access uses Spring Data JPA. The API owns validation and business rules; the browser calls it over REST through the Angular development proxy (`/api` to port `8080`). AI requests will later go through the backend so provider credentials never reach the browser. Authentication and device sync are intentionally deferred until the local learning flow is working.
+The application uses one Angular single-page application and one Spring Boot REST API. PostgreSQL stores decks and cards; migrations are managed by Flyway and database access uses Spring Data JPA. The API owns validation and business rules; the browser calls it over REST through the Angular development proxy (`/api` to port `8080`). AI requests go through the backend so provider credentials never reach the browser. Authentication and device sync are intentionally deferred.
 
 ```text
 frontend/             Angular application
@@ -124,7 +132,7 @@ compose.yaml           local PostgreSQL service
 4. Add card persistence and API workflows with validation and tests. (Done.)
 5. Connect the Angular interface to deck and card workflows. (Done.)
 6. Add FSRS-6 study sessions, due queues, and review history. (Done.)
-7. Add reviewed, editable AI-generated card suggestions through a backend provider interface.
+7. Add reviewed, editable AI-generated card suggestions through Gemini. (Done.)
 
 ## Current limitations
 
@@ -132,7 +140,7 @@ compose.yaml           local PostgreSQL service
 - Accounts and synchronization are not implemented; this remains a single-library application.
 - Review scheduling uses official default FSRS-6 weights; custom parameter optimization and timezone-specific daily cutoffs are not implemented. Scheduling timestamps use UTC.
 - Backend tests use H2; a live PostgreSQL 18 smoke test has also passed in the development environment.
-- No account system, synchronization, or AI integration exists yet.
+- No account system or synchronization exists yet.
 - No API keys or other secrets are required by the current frontend.
 
 ## Manual smoke check
