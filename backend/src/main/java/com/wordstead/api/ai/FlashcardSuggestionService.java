@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Duration;
 import java.util.List;
@@ -45,7 +44,7 @@ public class FlashcardSuggestionService {
 
     public FlashcardSuggestionResponse suggest(String rawWord) {
         if (apiKey.isBlank()) {
-            throw new ResponseStatusException(SERVICE_UNAVAILABLE,
+            throw new FlashcardSuggestionException(SERVICE_UNAVAILABLE,
                     "AI suggestions are not configured. Set GEMINI_API_KEY for the backend.");
         }
 
@@ -68,11 +67,11 @@ public class FlashcardSuggestionService {
         } catch (RestClientResponseException exception) {
             int status = exception.getStatusCode().value();
             log.warn("Gemini API request failed with HTTP status {}", status);
-            throw new ResponseStatusException(BAD_GATEWAY, providerErrorMessage(status));
+            throw new FlashcardSuggestionException(BAD_GATEWAY, providerErrorMessage(status));
         } catch (RestClientException exception) {
             log.warn("Gemini API request failed before receiving an HTTP response ({})",
                     exception.getClass().getSimpleName());
-            throw new ResponseStatusException(BAD_GATEWAY,
+            throw new FlashcardSuggestionException(BAD_GATEWAY,
                     "Could not connect to Gemini. Check the backend network connection and try again.");
         }
     }
@@ -96,14 +95,14 @@ public class FlashcardSuggestionService {
     private FlashcardSuggestionResponse parseResponse(JsonNode response) {
         JsonNode textNode = response == null ? null : response.at("/candidates/0/content/parts/0/text");
         if (textNode == null || !textNode.isTextual()) {
-            throw new ResponseStatusException(BAD_GATEWAY, "Gemini returned an empty suggestion.");
+            throw new FlashcardSuggestionException(BAD_GATEWAY, "Gemini returned an empty suggestion.");
         }
         try {
             JsonNode suggestion = objectMapper.readTree(textNode.asText());
             return new FlashcardSuggestionResponse(requiredText(suggestion, "translation"),
                     requiredText(suggestion, "example"), requiredText(suggestion, "mnemonic"));
         } catch (Exception exception) {
-            throw new ResponseStatusException(BAD_GATEWAY, "Gemini returned an invalid flashcard suggestion.");
+            throw new FlashcardSuggestionException(BAD_GATEWAY, "Gemini returned an invalid flashcard suggestion.");
         }
     }
 
