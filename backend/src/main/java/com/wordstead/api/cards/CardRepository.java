@@ -54,6 +54,19 @@ public interface CardRepository extends JpaRepository<Flashcard, UUID> {
 
     @Query("""
             select card from Flashcard card
+            where card.dueAt <= :now or exists (
+                select review.submissionId from CardReview review
+                where review.card = card
+                  and review.reviewedAt = card.lastReviewAt
+                  and review.rating = :againRating
+            )
+            order by card.dueAt asc, card.createdAt asc
+            """)
+    List<Flashcard> findAllDue(@Param("now") Instant now, @Param("againRating") ReviewRating againRating,
+                               Pageable pageable);
+
+    @Query("""
+            select card from Flashcard card
             where card.deck.id = :deckId
               and (:query = ''
                    or lower(card.front) like lower(concat('%', :query, '%'))

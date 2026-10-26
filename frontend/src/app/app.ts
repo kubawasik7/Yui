@@ -40,6 +40,7 @@ export class App implements OnInit, OnDestroy {
   studyIndex = 0;
   studyFlipped = false;
   studyDeckName = '';
+  studyGlobal = false;
   reviewSaving = false;
   reviewError = '';
   pendingReview: { cardId: string; submissionId: string; answer: ReviewAnswer } | null = null;
@@ -92,6 +93,7 @@ export class App implements OnInit, OnDestroy {
 
   startStudy(deck: Deck, event?: Event): void {
     event?.stopPropagation();
+    this.studyGlobal = false;
     this.selectedDeck = deck;
     this.activeSection = 'study';
     this.studyDeckName = deck.name;
@@ -118,6 +120,7 @@ export class App implements OnInit, OnDestroy {
 
   endStudy(reloadDeck = true): void {
     this.studyMode = false;
+    this.studyGlobal = false;
     this.activeSection = 'decks';
     this.studyCards = [];
     this.studyIndex = 0;
@@ -134,7 +137,7 @@ export class App implements OnInit, OnDestroy {
 
   rateStudyCard(answer: ReviewAnswer): void {
     const card = this.currentStudyCard;
-    if (!this.selectedDeck || !card || !this.studyFlipped || this.reviewSaving) return;
+    if (!card || !this.studyFlipped || this.reviewSaving) return;
     if (!this.pendingReview) {
       this.pendingReview = { cardId: card.id, submissionId: crypto.randomUUID(), answer };
     }
@@ -143,7 +146,7 @@ export class App implements OnInit, OnDestroy {
     const pending = this.pendingReview;
     this.reviewSaving = true;
     this.reviewError = '';
-    this.api.submitReview(this.selectedDeck.id, card.id, {
+    this.api.submitReview(card.deckId, card.id, {
       submissionId: pending.submissionId,
       answer: pending.answer
     }).subscribe({
@@ -167,12 +170,15 @@ export class App implements OnInit, OnDestroy {
   }
 
   private loadDueStudyCards(): void {
-    if (!this.selectedDeck) return;
+    if (!this.studyGlobal && !this.selectedDeck) return;
     this.studyCards = [];
     this.studyIndex = 0;
     this.studyFlipped = false;
     this.loadingCards = true;
-    this.api.getCards(this.selectedDeck.id, '', true).subscribe({
+    const dueCardsRequest = this.studyGlobal
+      ? this.api.getDueCards()
+      : this.api.getCards(this.selectedDeck!.id, '', true);
+    dueCardsRequest.subscribe({
       next: (cards) => {
         this.studyCards = cards;
         this.studyIndex = 0;
@@ -313,8 +319,31 @@ export class App implements OnInit, OnDestroy {
   }
 
   startFirstStudy(): void {
-    const deck = this.decks.find((item) => item.cardCount > 0);
-    if (deck) this.startStudy(deck);
+    this.studyGlobal = true;
+    this.activeSection = 'study';
+    this.studyDeckName = 'Focus Session';
+    this.searchQuery = '';
+    this.studyCards = [];
+    this.studyIndex = 0;
+    this.studyFlipped = false;
+    this.loadingCards = true;
+    this.loadError = '';
+    this.reviewError = '';
+    this.api.getDueCards().subscribe({
+      next: (cards) => {
+        this.studyCards = cards;
+        this.studyMode = true;
+        this.loadingCards = false;
+        this.changeDetector.markForCheck();
+      },
+      error: (error: unknown) => {
+        this.loadError = this.errorMessage(error, 'Cards could not be loaded.');
+        this.loadingCards = false;
+        this.activeSection = 'decks';
+        this.studyGlobal = false;
+        this.changeDetector.markForCheck();
+      }
+    });
   }
 
   loadCards(): void {

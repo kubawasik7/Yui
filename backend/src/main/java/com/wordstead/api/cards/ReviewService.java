@@ -42,6 +42,13 @@ public class ReviewService {
                 .stream().map(CardResponse::from).toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<CardResponse> findAllDueCards(int requestedLimit) {
+        int limit = Math.max(1, Math.min(requestedLimit, 500));
+        return cardRepository.findAllDue(clock.instant(), ReviewRating.AGAIN, PageRequest.of(0, limit))
+                .stream().map(CardResponse::from).toList();
+    }
+
     @Transactional
     public ReviewResponse review(UUID deckId, UUID cardId, ReviewRequest request) {
         ReviewRating rating = request.answer().toFsrsRating();

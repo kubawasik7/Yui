@@ -88,6 +88,29 @@ class CardControllerTest {
     }
 
     @Test
+    void globalDueQueueIncludesCardsFromEveryDeck() throws Exception {
+        UUID firstDeckId = deckRepository.save(new Deck("Set one", null)).getId();
+        UUID secondDeckId = deckRepository.save(new Deck("Set two", null)).getId();
+        UUID firstCardId = extractId(request("POST", "/api/decks/" + firstDeckId + "/cards",
+                "{\"front\":\"first\",\"back\":\"pierwszy\"}").body());
+        UUID secondCardId = extractId(request("POST", "/api/decks/" + secondDeckId + "/cards",
+                "{\"front\":\"second\",\"back\":\"drugi\"}").body());
+
+        HttpResponse<String> globalDue = request("GET", "/api/cards/due", null);
+
+        assertEquals(200, globalDue.statusCode());
+        assertTrue(globalDue.body().contains(firstCardId.toString()));
+        assertTrue(globalDue.body().contains(secondCardId.toString()));
+        assertTrue(globalDue.body().contains(secondDeckId.toString()));
+        HttpResponse<String> firstDeckDue = request("GET", "/api/decks/" + firstDeckId + "/cards?dueOnly=true", null);
+        HttpResponse<String> secondDeckDue = request("GET", "/api/decks/" + secondDeckId + "/cards?dueOnly=true", null);
+        assertTrue(firstDeckDue.body().contains(firstCardId.toString()));
+        assertTrue(!firstDeckDue.body().contains(secondCardId.toString()));
+        assertTrue(secondDeckDue.body().contains(secondCardId.toString()));
+        assertTrue(!secondDeckDue.body().contains(firstCardId.toString()));
+    }
+
+    @Test
     void blankFrontIsRejected() throws Exception {
         UUID deckId = deckRepository.save(new Deck("Travel", null)).getId();
         HttpResponse<String> response = request("POST", "/api/decks/" + deckId + "/cards",

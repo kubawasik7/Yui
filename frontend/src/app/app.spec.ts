@@ -18,6 +18,7 @@ describe('App', () => {
 
   afterEach(() => {
     for (const request of httpTesting.match('/api/overview-stats')) request.flush(emptyOverviewStats());
+    for (const request of httpTesting.match('/api/cards/due')) request.flush([]);
     httpTesting.verify();
   });
 
@@ -219,6 +220,44 @@ describe('App', () => {
 
     expect(fixture.componentInstance.studyCards).toHaveLength(1);
     expect(fixture.componentInstance.studyMode).toBe(true);
+  });
+
+  it('Focus Session loads due cards from all decks and submits using each card’s deck', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const decks: Deck[] = [
+      {
+        id: 'deck-1', name: 'Set one', description: null, cardCount: 1, desiredRetention: 0.9,
+        createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
+      },
+      {
+        id: 'deck-2', name: 'Set two', description: null, cardCount: 1, desiredRetention: 0.9,
+        createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
+      }
+    ];
+    httpTesting.expectOne('/api/decks').flush(decks);
+
+    const app = fixture.componentInstance;
+    app.startFirstStudy();
+    httpTesting.expectOne('/api/cards/due').flush([{
+      id: 'card-2', deckId: 'deck-2', front: 'second', back: 'drugi', example: null,
+      mnemonic: null, notes: null, state: 'LEARNING', stability: null, difficulty: null,
+      dueAt: '2026-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
+      createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
+    }]);
+    expect(app.currentStudyCard?.deckId).toBe('deck-2');
+
+    app.studyFlipped = true;
+    app.rateStudyCard('REMEMBERED');
+    const reviewRequest = httpTesting.expectOne('/api/decks/deck-2/cards/card-2/reviews');
+    expect(reviewRequest.request.body.answer).toBe('REMEMBERED');
+    reviewRequest.flush({
+      submissionId: app.pendingReview!.submissionId, cardId: 'card-2', rating: 'GOOD',
+      reviewedAt: '2026-10-23T10:00:00Z', dueAt: '2026-10-24T00:00:00Z'
+    });
+    for (const request of httpTesting.match('/api/overview-stats')) request.flush(emptyOverviewStats());
+    httpTesting.expectOne('/api/cards/due').flush([]);
+    expect(app.studyCards).toHaveLength(0);
   });
 
   it('shows two accessible answers and submits their binary mappings to the backend', () => {

@@ -114,7 +114,7 @@
             }
           </section>
         } @else {
-          <section class="inline-empty"><span class="inline-empty-icon" aria-hidden="true">✳</span><h3>{{ selectedDeck?.cardCount ? 'You’re all caught up' : 'This deck has no cards yet' }}</h3><p>{{ selectedDeck?.cardCount ? 'There are no cards due right now. Come back when the next review is ready.' : 'Add your first card to start a study session.' }}</p>@if (reviewError) { <p class="form-error" role="alert">{{ reviewError }}</p> }<button class="secondary-button" type="button" (click)="endStudy()">Back to deck</button></section>
+          <section class="inline-empty"><span class="inline-empty-icon" aria-hidden="true">✳</span><h3>{{ studyGlobal || selectedDeck?.cardCount ? 'You’re all caught up' : 'This deck has no cards yet' }}</h3><p>{{ studyGlobal ? 'There are no cards due across your decks right now.' : (selectedDeck?.cardCount ? 'There are no cards due in this deck right now. Come back when the next review is ready.' : 'Add your first card to start a study session.') }}</p>@if (reviewError) { <p class="form-error" role="alert">{{ reviewError }}</p> }<button class="secondary-button" type="button" (click)="endStudy()">Back to deck</button></section>
         }
       } @else if (selectedDeck; as deck) {
         <section class="deck-detail-heading">
