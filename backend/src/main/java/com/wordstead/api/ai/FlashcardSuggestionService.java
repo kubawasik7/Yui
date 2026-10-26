@@ -83,11 +83,31 @@ public class FlashcardSuggestionService {
             log.warn("Gemini API request failed with HTTP status {}", status);
             throw new FlashcardSuggestionException(BAD_GATEWAY, providerErrorMessage(status, exception));
         } catch (RestClientException exception) {
-            log.warn("Gemini API request failed before receiving an HTTP response ({})",
-                    exception.getClass().getSimpleName());
+            Throwable rootCause = rootCauseOf(exception);
+            String diagnostic = safeDiagnostic(rootCause.getMessage());
+            log.warn("Gemini API request failed before receiving an HTTP response; root cause: {}{}",
+                    rootCause.getClass().getSimpleName(), diagnostic == null ? "" : ": " + diagnostic);
             throw new FlashcardSuggestionException(BAD_GATEWAY,
-                    "Could not connect to Gemini. Check the backend network connection and try again.");
+                    "Could not connect to Gemini (" + rootCause.getClass().getSimpleName()
+                            + (diagnostic == null ? "" : ": " + diagnostic)
+                            + "). Check the backend network or proxy settings and try again.");
         }
+    }
+
+    private Throwable rootCauseOf(Throwable exception) {
+        Throwable cause = exception;
+        while (cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+        return cause;
+    }
+
+    private String safeDiagnostic(String message) {
+        if (message == null || message.isBlank()) {
+            return null;
+        }
+        String sanitized = message.replaceAll("[\\r\\n\\t]+", " ").trim();
+        return sanitized.length() > 180 ? sanitized.substring(0, 180) : sanitized;
     }
 
     private String providerErrorMessage(int status, RestClientResponseException exception) {
