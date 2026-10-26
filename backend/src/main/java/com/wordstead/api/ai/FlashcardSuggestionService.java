@@ -32,7 +32,7 @@ public class FlashcardSuggestionService {
 
     public FlashcardSuggestionService(ObjectMapper objectMapper,
             @Value("${yui.ai.gemini.api-key:}") String apiKey,
-            @Value("${yui.ai.gemini.model:gemini-3.8-flash}") String model) {
+            @Value("${yui.ai.gemini.model:gemini-3.5-flash-lite}") String model) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(5));
         requestFactory.setReadTimeout(Duration.ofSeconds(25));
@@ -54,7 +54,7 @@ public class FlashcardSuggestionService {
         if (normalized.endsWith(":generateContent")) {
             normalized = normalized.substring(0, normalized.length() - ":generateContent".length());
         }
-        return normalized.isBlank() ? "gemini-3.8-flash" : normalized;
+        return normalized.isBlank() ? "gemini-3.5-flash-lite" : normalized;
     }
 
     public FlashcardSuggestionResponse suggest(String rawWord) {
@@ -116,7 +116,7 @@ public class FlashcardSuggestionService {
         }
         if (status == 404) {
             String providerMessage = safeProviderMessage(exception.getResponseBodyAsString());
-            return "Gemini returned 404. Set GEMINI_MODEL exactly to gemini-3.8-flash "
+            return "Gemini returned 404. Set GEMINI_MODEL exactly to gemini-3.5-flash-lite "
                     + "without 'models/' or ':generateContent', then fully restart."
                     + (providerMessage == null ? "" : " Google detail: " + providerMessage);
         }
