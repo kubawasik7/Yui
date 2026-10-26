@@ -1,0 +1,233 @@
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Main navigation">
+    <a class="brand" href="/" aria-label="Yui home">
+      <span class="brand-mark" aria-hidden="true">y</span>
+      <span>Yui</span>
+    </a>
+
+    <div class="nav-label">WORKSPACE</div>
+    <nav>
+      <button class="nav-item" [class.active]="!selectedDeck" type="button" (click)="showOverview()">
+        <span class="nav-icon" aria-hidden="true">⌂</span>Overview
+      </button>
+      <button class="nav-item" [class.active]="!!selectedDeck" type="button" (click)="showOverview()">
+        <span class="nav-icon" aria-hidden="true">▤</span>My decks
+        <span class="nav-count">{{ decks.length }}</span>
+      </button>
+      <span class="nav-item muted" aria-disabled="true">
+        <span class="nav-icon" aria-hidden="true">✳</span>Study
+        <span class="nav-count">soon</span>
+      </span>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-note">
+        <span class="note-sparkle" aria-hidden="true">✳</span>
+        <p>A calmer way to make new words stick.</p>
+      </div>
+      <div class="profile">
+        <span class="avatar" aria-hidden="true">K</span>
+        <span class="profile-copy"><strong>Your workspace</strong><small>Personal library</small></span>
+        <span class="profile-menu" aria-hidden="true">···</span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="topbar">
+      <div class="breadcrumb">
+        <button type="button" (click)="showOverview()">Workspace</button>
+        <span class="crumb-divider">/</span>
+        <strong>{{ selectedDeck?.name ?? 'Overview' }}</strong>
+      </div>
+      <span class="today-label"><span class="status-dot"></span> Your learning space</span>
+    </header>
+
+    <div class="page-content">
+      @if (notice) {
+        <div class="notice" role="status">
+          <span>{{ notice }}</span>
+          <button type="button" aria-label="Dismiss message" (click)="notice = ''">×</button>
+        </div>
+      }
+      @if (loadError) {
+        <div class="error-banner" role="alert">
+          <span>{{ loadError }}</span>
+          <button type="button" (click)="selectedDeck ? loadCards() : loadDecks()">Try again</button>
+        </div>
+      }
+
+      @if (selectedDeck; as deck) {
+        <section class="deck-detail-heading">
+          <div>
+            <button class="back-link" type="button" (click)="showOverview()">← All decks</button>
+            <p class="eyebrow">YOUR DECK</p>
+            <h1 class="detail-title">{{ deck.name }}</h1>
+            @if (deck.description) { <p class="detail-description">{{ deck.description }}</p> }
+          </div>
+          <button class="primary-button" type="button" (click)="createCard()"><span aria-hidden="true">＋</span> Add a card</button>
+        </section>
+
+        <section class="cards-toolbar" aria-label="Card tools">
+          <div class="toolbar-copy">
+            <p class="eyebrow">{{ deck.cardCount }} {{ deck.cardCount === 1 ? 'CARD' : 'CARDS' }}</p>
+            <h2>Your cards</h2>
+          </div>
+          <form class="search-form" (ngSubmit)="loadCards()">
+            <label class="visually-hidden" for="card-search">Search this deck</label>
+            <span aria-hidden="true">⌕</span>
+            <input id="card-search" name="searchQuery" [(ngModel)]="searchQuery" placeholder="Search this deck" />
+            @if (searchQuery) {
+              <button class="clear-search" type="button" aria-label="Clear search" (click)="searchQuery = ''; loadCards()">×</button>
+            }
+            <button class="search-submit" type="submit">Search</button>
+          </form>
+        </section>
+
+        @if (loadingCards) {
+          <div class="loading-state" role="status">Loading cards…</div>
+        } @else if (cards.length) {
+          <section class="card-list" aria-label="Cards in this deck">
+            @for (card of cards; track card.id) {
+              <article class="flashcard-row">
+                <div class="flashcard-content">
+                  <div class="flashcard-sides">
+                    <div><span class="field-label">FRONT</span><h3>{{ card.front }}</h3></div>
+                    <span class="side-arrow" aria-hidden="true">→</span>
+                    <div><span class="field-label">BACK</span><p class="card-back-text">{{ card.back }}</p></div>
+                  </div>
+                  @if (card.example) { <p class="card-example">“{{ card.example }}”</p> }
+                  @if (card.mnemonic) { <p class="card-extra"><span>✳</span> {{ card.mnemonic }}</p> }
+                  @if (card.notes) { <p class="card-notes">{{ card.notes }}</p> }
+                </div>
+                <div class="row-actions">
+                  <button type="button" aria-label="Edit card" title="Edit card" (click)="editCard(card)">✎</button>
+                  <button type="button" class="delete-action" aria-label="Delete card" title="Delete card" (click)="deleteCard(card)">×</button>
+                </div>
+              </article>
+            }
+          </section>
+        } @else {
+          <section class="inline-empty">
+            <span class="inline-empty-icon" aria-hidden="true">▤</span>
+            <h3>{{ searchQuery ? 'No cards match that search' : 'This deck is ready for its first card' }}</h3>
+            <p>{{ searchQuery ? 'Try another word or clear the search.' : 'Add a word, its meaning, and an example you will remember.' }}</p>
+            @if (!searchQuery) { <button class="secondary-button" type="button" (click)="createCard()">＋ Add the first card</button> }
+          </section>
+        }
+      } @else {
+        <section class="welcome">
+          <div>
+            <p class="eyebrow">YOUR LANGUAGE JOURNAL</p>
+            <h1>Small steps,<br /><span>stronger words.</span></h1>
+            <p class="welcome-copy">A little practice today makes a lasting difference tomorrow.</p>
+          </div>
+          <div class="welcome-art" aria-hidden="true">
+            <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+            <div class="word-card card-back">bright <span>adjective</span></div>
+            <div class="word-card card-front">serendipity <span>/ˌser.ənˈdɪp.ə.ti/</span><i>the joy of finding something unexpected</i></div>
+            <span class="art-sparkle sparkle-one">✳</span><span class="art-sparkle sparkle-two">✦</span>
+          </div>
+        </section>
+
+        <section class="section-heading">
+          <div><p class="eyebrow">YOUR LEARNING SPACE</p><h2>Ready when you are</h2></div>
+          <span class="library-count">{{ decks.length }} {{ decks.length === 1 ? 'deck' : 'decks' }} <span>·</span> {{ totalCards }} {{ totalCards === 1 ? 'card' : 'cards' }}</span>
+        </section>
+
+        @if (loadingDecks) {
+          <div class="loading-state" role="status">Loading your library…</div>
+        } @else if (decks.length) {
+          <section class="deck-grid" aria-label="Your decks">
+            @for (deckItem of decks; track deckItem.id) {
+              <article class="deck-tile">
+                <button class="deck-open" type="button" (click)="openDeck(deckItem)">
+                  <span class="deck-symbol" aria-hidden="true">▤</span>
+                  <span class="deck-card-count">{{ deckItem.cardCount }} {{ deckItem.cardCount === 1 ? 'card' : 'cards' }}</span>
+                  <strong>{{ deckItem.name }}</strong>
+                  <span class="deck-description">{{ deckItem.description || 'A little space for new words.' }}</span>
+                  <span class="deck-open-link">Open deck <span aria-hidden="true">→</span></span>
+                </button>
+                <div class="deck-actions">
+                  <button type="button" (click)="editDeck(deckItem, $event)">Edit</button>
+                  <button class="delete-action" type="button" (click)="deleteDeck(deckItem, $event)">Delete</button>
+                </div>
+              </article>
+            }
+            <button class="add-deck-tile" type="button" (click)="createDeck()"><span>＋</span><strong>Create a deck</strong><small>Start a new collection</small></button>
+          </section>
+        } @else {
+          <section class="empty-state" aria-labelledby="empty-title">
+            <div class="empty-illustration" aria-hidden="true">
+              <div class="empty-card empty-card-back"></div>
+              <div class="empty-card empty-card-front"><span>hello</span><small>/həˈləʊ/</small></div>
+              <span class="empty-plus">+</span>
+            </div>
+            <p class="empty-kicker">A LIBRARY OF YOUR OWN</p>
+            <h3 id="empty-title">Your first deck starts here</h3>
+            <p class="empty-copy">Collect the words you want to remember. Your decks and cards will live here, ready for a study session whenever you are.</p>
+            <button class="primary-button" type="button" (click)="createDeck()"><span aria-hidden="true">＋</span> Create your first deck</button>
+          </section>
+        }
+      }
+
+      <footer class="page-footer"><span>Made for curious minds.</span><span>One word at a time <span class="footer-star">✳</span></span></footer>
+    </div>
+  </main>
+</div>
+
+@if (deckFormOpen) {
+  <div class="modal-backdrop">
+    <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="deck-form-title">
+      <button class="modal-close" type="button" aria-label="Close" (click)="closeForms()">×</button>
+      <p class="eyebrow">YOUR LIBRARY</p>
+      <h2 id="deck-form-title">{{ editingDeckId ? 'Edit your deck' : 'Create a deck' }}</h2>
+      <p class="modal-intro">Give this collection a name that helps you find it later.</p>
+      <form (ngSubmit)="saveDeck()">
+        <label for="deck-name">Deck name</label>
+        <input id="deck-name" name="deckName" [(ngModel)]="deckName" maxlength="100" required autofocus placeholder="e.g. Travel English" />
+        <label for="deck-description">Description <span>Optional</span></label>
+        <textarea id="deck-description" name="deckDescription" [(ngModel)]="deckDescription" maxlength="500" rows="3" placeholder="What are you learning in this deck?"></textarea>
+        @if (loadError) { <p class="form-error" role="alert">{{ loadError }}</p> }
+        <div class="modal-actions">
+          <button class="secondary-button" type="button" (click)="closeForms()">Cancel</button>
+          <button class="primary-button" type="submit" [disabled]="saving || !deckName.trim()">{{ saving ? 'Saving…' : (editingDeckId ? 'Save changes' : 'Create deck') }}</button>
+        </div>
+      </form>
+    </section>
+  </div>
+}
+
+@if (cardFormOpen) {
+  <div class="modal-backdrop">
+    <section class="modal-panel card-modal" role="dialog" aria-modal="true" aria-labelledby="card-form-title">
+      <button class="modal-close" type="button" aria-label="Close" (click)="closeForms()">×</button>
+      <p class="eyebrow">{{ selectedDeck?.name }}</p>
+      <h2 id="card-form-title">{{ editingCardId ? 'Edit your card' : 'Add a card' }}</h2>
+      <p class="modal-intro">Capture the word and the context that makes it memorable.</p>
+      <form (ngSubmit)="saveCard()">
+        <div class="form-columns">
+          <div>
+            <label for="card-front">Front <span>Word or question</span></label>
+            <textarea id="card-front" name="front" [(ngModel)]="cardForm.front" maxlength="1000" rows="2" required placeholder="to board"></textarea>
+          </div>
+          <div>
+            <label for="card-back">Back <span>Meaning or answer</span></label>
+            <textarea id="card-back" name="back" [(ngModel)]="cardForm.back" maxlength="2000" rows="2" required placeholder="wsiadać"></textarea>
+          </div>
+        </div>
+        <label for="card-example">Example <span>Optional</span></label>
+        <textarea id="card-example" name="example" [(ngModel)]="cardForm.example" maxlength="2000" rows="2" placeholder="We board at gate 4."></textarea>
+        <label for="card-mnemonic">Memory association <span>Optional</span></label>
+        <input id="card-mnemonic" name="mnemonic" [(ngModel)]="cardForm.mnemonic" maxlength="1000" placeholder="A hint that helps you remember" />
+        <label for="card-notes">Notes <span>Optional</span></label>
+        <textarea id="card-notes" name="notes" [(ngModel)]="cardForm.notes" maxlength="5000" rows="2" placeholder="Extra context"></textarea>
+        @if (loadError) { <p class="form-error" role="alert">{{ loadError }}</p> }
+        <div class="modal-actions">
+          <button class="secondary-button" type="button" (click)="closeForms()">Cancel</button>
+          <button class="primary-button" type="submit" [disabled]="saving || !cardForm.front.trim() || !cardForm.back.trim()">{{ saving ? 'Saving…' : (editingCardId ? 'Save changes' : 'Add card') }}</button>
+        </div>
+      </form>
+    </section>
+  </div>
+}

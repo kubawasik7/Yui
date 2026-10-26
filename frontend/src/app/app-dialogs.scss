@@ -1,0 +1,25 @@
+.modal-backdrop { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; overflow: auto; padding: 22px; background: rgba(37, 48, 40, .34); backdrop-filter: blur(2px); }
+.modal-panel { position: relative; width: min(100%, 470px); max-height: min(90vh, 820px); overflow: auto; padding: 29px 31px 25px; border: 1px solid #e8eae3; border-radius: 12px; background: #fffefa; box-shadow: 0 18px 60px rgba(34, 48, 36, .19); }
+.card-modal { width: min(100%, 610px); }
+.modal-close { position: absolute; top: 15px; right: 17px; width: 29px; height: 29px; border: 0; border-radius: 50%; background: #f3f4ef; color: #737b70; font-size: 19px; cursor: pointer; }
+.modal-panel > .eyebrow { margin-bottom: 7px; }
+.modal-panel h2 { color: #3b493e; font-family: Georgia, serif; font-size: 23px; }
+.modal-intro { margin: 8px 0 21px; color: #868b81; font-size: 11px; line-height: 1.5; }
+.modal-panel form { display: grid; gap: 8px; }
+.modal-panel label { margin-top: 5px; color: #4b574d; font-size: 10px; font-weight: 650; }
+.modal-panel label span { margin-left: 5px; color: #9a9e95; font-size: 9px; font-weight: 400; }
+.modal-panel input, .modal-panel textarea { width: 100%; min-height: 37px; padding: 9px 10px; border: 1px solid #e4e7df; border-radius: 6px; outline: 0; background: #fff; color: #3c493f; font: inherit; font-size: 11px; resize: vertical; }
+.modal-panel input:focus, .modal-panel textarea:focus { border-color: #9bad97; box-shadow: 0 0 0 3px #dfe9dc80; }
+.modal-panel input::placeholder, .modal-panel textarea::placeholder { color: #b0b2aa; }
+.form-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+.form-columns > div { display: grid; gap: 8px; }
+.form-error { margin: 5px 0; color: #a2543f; font-size: 10px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.modal-actions .primary-button { border-color: #557b65; background: #557b65; color: #fff; cursor: pointer; }
+.modal-actions .primary-button:hover { background: #456b55; }
+.modal-actions .primary-button:disabled { border-color: #dfe2d9; background: #f1f3ee; color: #999e94; cursor: not-allowed; }
+
+@media (max-width: 680px) {
+  .form-columns { grid-template-columns: 1fr; gap: 8px; }
+  .modal-panel { padding: 25px 19px 19px; }
+}

@@ -1,0 +1,230 @@
+import { HttpErrorResponse } from '@angular/common/http';
+import { CommonModule } from '@angular/common';
+import { Component, OnInit, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import {
+  Deck,
+  Flashcard,
+  FlashcardApiService,
+  FlashcardInput
+} from './flashcard-api.service';
+
+@Component({
+  selector: 'app-root',
+  imports: [CommonModule, FormsModule],
+  templateUrl: './app.html',
+  styleUrls: ['./app.scss', './app-features.scss', './app-dialogs.scss']
+})
+export class App implements OnInit {
+  private readonly api = inject(FlashcardApiService);
+
+  decks: Deck[] = [];
+  cards: Flashcard[] = [];
+  selectedDeck: Deck | null = null;
+  loadingDecks = false;
+  loadingCards = false;
+  saving = false;
+  loadError = '';
+  notice = '';
+  searchQuery = '';
+
+  deckFormOpen = false;
+  editingDeckId: string | null = null;
+  deckName = '';
+  deckDescription = '';
+
+  cardFormOpen = false;
+  editingCardId: string | null = null;
+  cardForm: FlashcardInput = this.emptyCard();
+
+  ngOnInit(): void {
+    this.loadDecks();
+  }
+
+  get totalCards(): number {
+    return this.decks.reduce((total, deck) => total + deck.cardCount, 0);
+  }
+
+  loadDecks(): void {
+    this.loadingDecks = true;
+    this.loadError = '';
+    this.api.getDecks().subscribe({
+      next: (decks) => {
+        this.decks = decks;
+        if (this.selectedDeck) {
+          this.selectedDeck = decks.find((deck) => deck.id === this.selectedDeck?.id) ?? null;
+        }
+        this.loadingDecks = false;
+      },
+      error: (error: unknown) => {
+        this.loadError = this.errorMessage(error, 'Your decks could not be loaded.');
+        this.loadingDecks = false;
+      }
+    });
+  }
+
+  openDeck(deck: Deck): void {
+    this.selectedDeck = deck;
+    this.searchQuery = '';
+    this.loadCards();
+  }
+
+  showOverview(): void {
+    this.selectedDeck = null;
+    this.cards = [];
+    this.loadError = '';
+  }
+
+  loadCards(): void {
+    if (!this.selectedDeck) return;
+    this.loadingCards = true;
+    this.loadError = '';
+    this.api.getCards(this.selectedDeck.id, this.searchQuery).subscribe({
+      next: (cards) => {
+        this.cards = cards;
+        this.loadingCards = false;
+      },
+      error: (error: unknown) => {
+        this.loadError = this.errorMessage(error, 'Cards could not be loaded.');
+        this.loadingCards = false;
+      }
+    });
+  }
+
+  createDeck(): void {
+    this.editingDeckId = null;
+    this.deckName = '';
+    this.deckDescription = '';
+    this.deckFormOpen = true;
+    this.notice = '';
+    this.loadError = '';
+  }
+
+  editDeck(deck: Deck, event?: Event): void {
+    event?.stopPropagation();
+    this.editingDeckId = deck.id;
+    this.deckName = deck.name;
+    this.deckDescription = deck.description ?? '';
+    this.deckFormOpen = true;
+    this.notice = '';
+    this.loadError = '';
+  }
+
+  saveDeck(): void {
+    const name = this.deckName.trim();
+    if (!name || this.saving) return;
+    const input = { name, description: this.deckDescription.trim() || null };
+    const request = this.editingDeckId
+      ? this.api.updateDeck(this.editingDeckId, input)
+      : this.api.createDeck(input);
+
+    this.saving = true;
+    request.subscribe({
+      next: (deck) => {
+        this.deckFormOpen = false;
+        this.saving = false;
+        this.notice = this.editingDeckId ? 'Deck updated.' : 'Deck created.';
+        if (this.selectedDeck?.id === deck.id) this.selectedDeck = deck;
+        this.loadDecks();
+      },
+      error: (error: unknown) => {
+        this.loadError = this.errorMessage(error, 'The deck could not be saved.');
+        this.saving = false;
+      }
+    });
+  }
+
+  deleteDeck(deck: Deck, event?: Event): void {
+    event?.stopPropagation();
+    if (!window.confirm(`Delete “${deck.name}” and all its cards?`)) return;
+    this.api.deleteDeck(deck.id).subscribe({
+      next: () => {
+        if (this.selectedDeck?.id === deck.id) this.showOverview();
+        this.notice = 'Deck deleted.';
+        this.loadDecks();
+      },
+      error: (error: unknown) => this.loadError = this.errorMessage(error, 'The deck could not be deleted.')
+    });
+  }
+
+  createCard(): void {
+    this.editingCardId = null;
+    this.cardForm = this.emptyCard();
+    this.cardFormOpen = true;
+    this.notice = '';
+    this.loadError = '';
+  }
+
+  editCard(card: Flashcard): void {
+    this.editingCardId = card.id;
+    this.cardForm = {
+      front: card.front,
+      back: card.back,
+      example: card.example ?? '',
+      mnemonic: card.mnemonic ?? '',
+      notes: card.notes ?? ''
+    };
+    this.cardFormOpen = true;
+    this.notice = '';
+    this.loadError = '';
+  }
+
+  saveCard(): void {
+    if (!this.selectedDeck || !this.cardForm.front.trim() || !this.cardForm.back.trim() || this.saving) return;
+    const input: FlashcardInput = {
+      front: this.cardForm.front.trim(),
+      back: this.cardForm.back.trim(),
+      example: this.cardForm.example?.trim() || null,
+      mnemonic: this.cardForm.mnemonic?.trim() || null,
+      notes: this.cardForm.notes?.trim() || null
+    };
+    const request = this.editingCardId
+      ? this.api.updateCard(this.selectedDeck.id, this.editingCardId, input)
+      : this.api.createCard(this.selectedDeck.id, input);
+
+    this.saving = true;
+    request.subscribe({
+      next: () => {
+        this.cardFormOpen = false;
+        this.saving = false;
+        this.notice = this.editingCardId ? 'Card updated.' : 'Card added.';
+        this.loadCards();
+        this.loadDecks();
+      },
+      error: (error: unknown) => {
+        this.loadError = this.errorMessage(error, 'The card could not be saved.');
+        this.saving = false;
+      }
+    });
+  }
+
+  deleteCard(card: Flashcard): void {
+    if (!this.selectedDeck || !window.confirm(`Delete “${card.front}”?`)) return;
+    this.api.deleteCard(this.selectedDeck.id, card.id).subscribe({
+      next: () => {
+        this.notice = 'Card deleted.';
+        this.loadCards();
+        this.loadDecks();
+      },
+      error: (error: unknown) => this.loadError = this.errorMessage(error, 'The card could not be deleted.')
+    });
+  }
+
+  closeForms(): void {
+    this.deckFormOpen = false;
+    this.cardFormOpen = false;
+  }
+
+  private emptyCard(): FlashcardInput {
+    return { front: '', back: '', example: '', mnemonic: '', notes: '' };
+  }
+
+  private errorMessage(error: unknown, fallback: string): string {
+    if (error instanceof HttpErrorResponse) {
+      if (error.status === 0) return 'Cannot reach the API. Start the backend and try again.';
+      const message = error.error?.detail ?? error.error?.message;
+      if (typeof message === 'string') return message;
+    }
+    return fallback;
+  }
+}
