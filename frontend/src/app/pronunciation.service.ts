@@ -1,6 +1,7 @@
 import { Injectable, OnDestroy, signal } from '@angular/core';
 
 const VOICE_LOAD_TIMEOUT_MS = 5_000;
+const VOICE_STORAGE_KEY = 'yui.pronunciation.voiceURI';
 
 @Injectable({ providedIn: 'root' })
 export class PronunciationService implements OnDestroy {
@@ -8,6 +9,8 @@ export class PronunciationService implements OnDestroy {
   readonly isLoadingVoice = signal(false);
   readonly activeText = signal('');
   readonly message = signal('');
+  readonly localUsEnglishVoices = signal<SpeechSynthesisVoice[]>([]);
+  readonly selectedVoiceId = signal('');
 
   private readonly synthesis: SpeechSynthesis | null;
   private availableVoices: SpeechSynthesisVoice[] = [];
@@ -16,6 +19,7 @@ export class PronunciationService implements OnDestroy {
   private readonly onVoicesChanged = () => this.refreshVoices();
 
   constructor() {
+    this.selectedVoiceId.set(this.readStoredVoiceId());
     this.synthesis = typeof window !== 'undefined' && 'speechSynthesis' in window
       ? window.speechSynthesis
       : null;
@@ -32,6 +36,20 @@ export class PronunciationService implements OnDestroy {
 
   isBusyFor(text: string): boolean {
     return this.activeText() === text && (this.isSpeaking() || this.isLoadingVoice());
+  }
+
+  voiceId(voice: SpeechSynthesisVoice): string {
+    return voice.voiceURI || `${voice.name}|${voice.lang}`;
+  }
+
+  selectVoice(id: string): void {
+    if (!this.localUsEnglishVoices().some((voice) => this.voiceId(voice) === id)) return;
+    this.selectedVoiceId.set(id);
+    try {
+      window.localStorage.setItem(VOICE_STORAGE_KEY, id);
+    } catch {
+      // The selected voice remains active for this session if storage is unavailable.
+    }
   }
 
   async speak(rawText: string): Promise<void> {
@@ -52,12 +70,12 @@ export class PronunciationService implements OnDestroy {
     this.message.set('');
     this.activeText.set(text);
 
-    let voice = this.findUsEnglishVoice(this.refreshVoices());
+    let voice = this.findPreferredUsEnglishVoice(this.refreshVoices());
     if (!voice) {
       this.isLoadingVoice.set(true);
       const voices = await this.waitForUsEnglishVoice(synthesis);
       if (requestId !== this.requestId) return;
-      voice = this.findUsEnglishVoice(voices);
+      voice = this.findPreferredUsEnglishVoice(voices);
     }
 
     if (requestId !== this.requestId) return;
@@ -100,16 +118,32 @@ export class PronunciationService implements OnDestroy {
     this.message.set('');
   }
 
-  private findUsEnglishVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  private findPreferredUsEnglishVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
     const candidates = voices.filter((voice) => voice.localService === true
       && voice.lang.replace('_', '-').toLowerCase() === 'en-us');
-    return candidates.find((voice) => voice.default) ?? candidates[0] ?? null;
+    const selectedId = this.selectedVoiceId();
+    return candidates.find((voice) => this.voiceId(voice) === selectedId)
+      ?? candidates.find((voice) => voice.default)
+      ?? candidates[0]
+      ?? null;
   }
 
   private refreshVoices(): SpeechSynthesisVoice[] {
     const voices = this.synthesis?.getVoices() ?? [];
-    if (voices.length) this.availableVoices = voices;
+    if (voices.length) {
+      this.availableVoices = voices;
+      this.localUsEnglishVoices.set(voices.filter((voice) => voice.localService === true
+        && voice.lang.replace('_', '-').toLowerCase() === 'en-us'));
+    }
     return this.availableVoices;
+  }
+
+  private readStoredVoiceId(): string {
+    try {
+      return typeof window === 'undefined' ? '' : window.localStorage.getItem(VOICE_STORAGE_KEY) ?? '';
+    } catch {
+      return '';
+    }
   }
 
   private noLocalVoiceMessage(voices: SpeechSynthesisVoice[]): string {
@@ -137,7 +171,7 @@ export class PronunciationService implements OnDestroy {
       };
       const onVoicesChanged = () => {
         const voices = this.refreshVoices();
-        if (this.findUsEnglishVoice(voices)) finish(voices);
+        if (this.findPreferredUsEnglishVoice(voices)) finish(voices);
       };
 
       synthesis.addEventListener('voiceschanged', onVoicesChanged);

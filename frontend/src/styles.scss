@@ -141,3 +141,22 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .study-front-word .pronunciation-button { width: 40px; height: 40px; }
 .pronunciation-button:hover { transform: translateY(-1px); background: #ff2e6324; box-shadow: 0 0 12px #ff2e6326; }
 .pronunciation-button:focus-visible { outline: 2px solid var(--sakura); outline-offset: 3px; }
+
+.settings-view { position: relative; min-height: 420px; padding-top: 9px; }
+.settings-heading { margin-bottom: 25px; }
+.settings-heading h1 { font-size: clamp(31px, 3.4vw, 42px); }
+.settings-panel { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 17px; overflow: hidden; max-width: 760px; padding: 25px; border: 1px solid var(--border); border-radius: 13px; background: radial-gradient(ellipse at 100% 0%, #ff2e630d, transparent 40%), var(--surface); }
+.settings-panel-icon { display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid #ff2e6340; border-radius: 11px; background: #ff2e6316; color: var(--sakura); font-size: 20px; }
+.settings-panel-copy { position: relative; z-index: 1; min-width: 0; }
+.settings-panel-copy .eyebrow { margin: 1px 0 7px; font-size: 8px; }
+.settings-panel-copy h2 { font: 21px Georgia, serif; }
+.settings-panel-copy > p:not(.eyebrow) { max-width: 490px; margin: 9px 0 18px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.settings-label { display: block; margin-bottom: 7px; color: var(--text); font-size: 10px; font-weight: 650; }
+.settings-select { display: block; width: min(100%, 440px); min-height: 40px; padding: 8px 11px; border: 1px solid var(--border); border-radius: 7px; outline: 0; background: #111319; color: var(--text); font: inherit; font-size: 11px; }
+.settings-select:focus-visible { border-color: var(--sakura); box-shadow: 0 0 0 3px #ff2e6318; }
+.settings-test-button { margin-top: 12px; min-height: 38px; }
+.settings-voice-empty { padding: 10px 12px; border: 1px solid #e6394640; border-radius: 7px; background: #e639460d; color: #ff9da5 !important; }
+.settings-panel-copy > .settings-privacy-note { margin: 14px 0 0 !important; font-size: 9px !important; }
+.settings-kanji { position: absolute; right: 17px; bottom: -49px; color: var(--sakura); font: 165px Georgia, serif; opacity: .045; pointer-events: none; }
+.nav-item:focus-visible { outline: 2px solid var(--sakura); outline-offset: 2px; }
+@media (max-width: 680px) { .settings-panel { grid-template-columns: 34px minmax(0, 1fr); gap: 12px; padding: 19px 15px; }.settings-panel-icon { width: 34px; height: 34px; }.settings-kanji { right: -18px; font-size: 130px; } }

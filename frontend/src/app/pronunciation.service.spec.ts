@@ -17,6 +17,7 @@ const originalSpeechSynthesis = Object.getOwnPropertyDescriptor(window, 'speechS
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  window.localStorage.removeItem('yui.pronunciation.voiceURI');
   if (originalSpeechSynthesis) {
     Object.defineProperty(window, 'speechSynthesis', originalSpeechSynthesis);
   } else {
@@ -48,8 +49,8 @@ function installSpeechSynthesis(initialVoices: SpeechSynthesisVoice[]) {
   };
 }
 
-function voice(lang: string, name: string, localService = true): SpeechSynthesisVoice {
-  return { lang, name, default: true, localService } as SpeechSynthesisVoice;
+function voice(lang: string, name: string, localService = true, isDefault = true): SpeechSynthesisVoice {
+  return { lang, name, default: isDefault, localService, voiceURI: `${name}-${lang}` } as SpeechSynthesisVoice;
 }
 
 describe('PronunciationService', () => {
@@ -94,5 +95,22 @@ describe('PronunciationService', () => {
     expect(speech.synthesis.speak).not.toHaveBeenCalled();
     expect(service.message()).toContain('No local en-US speech voice is available');
     expect(service.message()).toContain('Cloud voice (en-US, remote)');
+  });
+
+  it('uses and persists the specifically selected local en-US voice', async () => {
+    const defaultVoice = voice('en-US', 'Male default voice', true, true);
+    const selectedVoice = voice('en-US', 'Female selected voice', true, false);
+    const speech = installSpeechSynthesis([defaultVoice, selectedVoice]);
+    const service = new PronunciationService();
+
+    const selectedId = service.voiceId(selectedVoice);
+    service.selectVoice(selectedId);
+    await service.speak('hello');
+
+    expect(service.localUsEnglishVoices().map((item) => item.name)).toEqual([
+      'Male default voice', 'Female selected voice'
+    ]);
+    expect(speech.utterance()?.voice?.name).toBe('Female selected voice');
+    expect(window.localStorage.getItem('yui.pronunciation.voiceURI')).toBe(selectedId);
   });
 });

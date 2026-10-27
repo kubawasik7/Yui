@@ -18,6 +18,9 @@
         <span class="nav-icon" aria-hidden="true">✳</span>Study
         <span class="nav-count">{{ decks.length ? '↗' : '—' }}</span>
       </button>
+      <button class="nav-item" [class.active]="activeSection === 'settings'" [attr.aria-current]="activeSection === 'settings' ? 'page' : null" type="button" (click)="showSettings()">
+        <span class="nav-icon" aria-hidden="true">⚙</span>Settings
+      </button>
     </nav>
 
     <div class="sidebar-bottom">
@@ -38,7 +41,7 @@
       <div class="breadcrumb">
         <button type="button" (click)="showOverview()">Workspace</button>
         <span class="crumb-divider">/</span>
-        <strong>{{ selectedDeck?.name ?? 'Overview' }}</strong>
+        <strong>{{ selectedDeck?.name ?? (activeSection === 'settings' ? 'Settings' : activeSection === 'study' ? 'Study' : 'Overview') }}</strong>
       </div>
       <span class="today-label"><span class="status-dot"></span> Your learning space</span>
     </header>
@@ -189,6 +192,39 @@
             @if (!searchQuery) { <button class="secondary-button" type="button" (click)="createCard()">＋ Add the first card</button> }
           </section>
         }
+      } @else if (activeSection === 'settings') {
+        <section class="settings-view" aria-labelledby="settings-title">
+          <div class="settings-heading">
+            <p class="eyebrow">PERSONALIZE YUI</p>
+            <h1 id="settings-title">Settings<span>.</span></h1>
+            <p class="welcome-copy">Choose how Yui speaks English words during study.</p>
+          </div>
+
+          <section class="settings-panel" aria-labelledby="voice-settings-title">
+            <div class="settings-panel-icon" aria-hidden="true">♫</div>
+            <div class="settings-panel-copy">
+              <p class="eyebrow">PRONUNCIATION</p>
+              <h2 id="voice-settings-title">English voice</h2>
+              <p>Choose an installed English (United States) voice. Your selection is saved on this device.</p>
+              @if (pronunciation.localUsEnglishVoices().length) {
+                <label class="settings-label" for="pronunciation-voice">Available en-US voices</label>
+                <select id="pronunciation-voice" class="settings-select" [ngModel]="pronunciationVoiceSelection" (ngModelChange)="pronunciation.selectVoice($event)">
+                  @for (voice of pronunciation.localUsEnglishVoices(); track pronunciation.voiceId(voice)) {
+                    <option [value]="pronunciation.voiceId(voice)">{{ voice.name }} — {{ voice.lang }}</option>
+                  }
+                </select>
+                <button class="primary-button settings-test-button" type="button" (click)="toggleVoiceTest()">
+                  <span aria-hidden="true">{{ pronunciation.isSpeaking() || pronunciation.isLoadingVoice() ? '■' : '▶' }}</span>
+                  {{ pronunciation.isSpeaking() || pronunciation.isLoadingVoice() ? 'Stop voice' : 'Test voice' }}
+                </button>
+              } @else {
+                <p class="settings-voice-empty" role="status">No local en-US voices are available in Yui. Install an English (United States) voice in Windows, then restart the app.</p>
+              }
+              <p class="settings-privacy-note">Only local voices shown by your system are used. Flashcard text is not sent anywhere for playback.</p>
+            </div>
+            <span class="settings-kanji" aria-hidden="true">結</span>
+          </section>
+        </section>
       } @else {
         <section class="welcome">
           <div>

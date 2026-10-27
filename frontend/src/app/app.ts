@@ -36,7 +36,7 @@ export class App implements OnInit, OnDestroy {
   overviewStatsError = '';
   notice = '';
   searchQuery = '';
-  activeSection: 'overview' | 'decks' | 'study' = 'overview';
+  activeSection: 'overview' | 'decks' | 'study' | 'settings' = 'overview';
   studyMode = false;
   studyCards: Flashcard[] = [];
   studyIndex = 0;
@@ -93,6 +93,14 @@ export class App implements OnInit, OnDestroy {
     return this.studyCards[this.studyIndex] ?? null;
   }
 
+  get pronunciationVoiceSelection(): string {
+    const voices = this.pronunciation.localUsEnglishVoices();
+    const selected = this.pronunciation.selectedVoiceId();
+    if (voices.some((voice) => this.pronunciation.voiceId(voice) === selected)) return selected;
+    const fallbackVoice = voices.find((voice) => voice.default) ?? voices[0];
+    return fallbackVoice ? this.pronunciation.voiceId(fallbackVoice) : '';
+  }
+
   startStudy(deck: Deck, event?: Event): void {
     event?.stopPropagation();
     this.studyGlobal = false;
@@ -141,6 +149,14 @@ export class App implements OnInit, OnDestroy {
     event.stopPropagation();
     if (this.pronunciation.isBusyFor(text)) this.pronunciation.stop();
     else void this.pronunciation.speak(text);
+  }
+
+  toggleVoiceTest(): void {
+    if (this.pronunciation.isSpeaking() || this.pronunciation.isLoadingVoice()) {
+      this.pronunciation.stop();
+    } else {
+      void this.pronunciation.speak('Hello. This is your selected Yui voice.');
+    }
   }
 
   rateStudyCard(answer: ReviewAnswer): void {
@@ -325,6 +341,15 @@ export class App implements OnInit, OnDestroy {
     this.loadError = '';
     this.changeDetector.markForCheck();
     requestAnimationFrame(() => document.getElementById('deck-library')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
+  showSettings(): void {
+    this.endStudy(false);
+    this.activeSection = 'settings';
+    this.selectedDeck = null;
+    this.cards = [];
+    this.loadError = '';
+    this.changeDetector.markForCheck();
   }
 
   startFirstStudy(): void {

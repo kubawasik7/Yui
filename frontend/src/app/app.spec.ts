@@ -40,6 +40,23 @@ describe('App', () => {
     expect(compiled.querySelector('h1')?.textContent).toContain('Small steps,');
   });
 
+  it('opens pronunciation settings without changing the current study data', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    httpTesting.expectOne('/api/decks').flush([]);
+    fixture.detectChanges();
+
+    const settingsButton = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button.nav-item')]
+      .find((button) => button.textContent?.includes('Settings'));
+    settingsButton?.click();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('#settings-title')?.textContent).toContain('Settings');
+    expect(compiled.querySelector('[aria-current="page"]')?.textContent).toContain('Settings');
+    expect(compiled.querySelector('[role="status"]')?.textContent).toContain('No local en-US voices');
+  });
+
   it('renders counts, seven-day review activity, and the FSRS forecast from overview statistics', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
