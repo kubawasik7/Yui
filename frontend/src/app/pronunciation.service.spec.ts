@@ -1,116 +1,113 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { TestBed } from '@angular/core/testing';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PronunciationService } from './pronunciation.service';
 
-class FakeUtterance {
-  lang = '';
-  voice: SpeechSynthesisVoice | null = null;
-  rate = 1;
-  onstart: ((event: SpeechSynthesisEvent) => void) | null = null;
-  onend: ((event: SpeechSynthesisEvent) => void) | null = null;
-  onerror: ((event: SpeechSynthesisErrorEvent) => void) | null = null;
+class FakeAudio {
+  static instances: FakeAudio[] = [];
+  onended: ((event: Event) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  play = vi.fn(() => Promise.resolve());
+  pause = vi.fn();
+  removeAttribute = vi.fn();
+  load = vi.fn();
 
-  constructor(readonly text: string) {}
-}
-
-const originalSpeechSynthesis = Object.getOwnPropertyDescriptor(window, 'speechSynthesis');
-
-afterEach(() => {
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
-  window.localStorage.removeItem('yui.pronunciation.voiceURI');
-  if (originalSpeechSynthesis) {
-    Object.defineProperty(window, 'speechSynthesis', originalSpeechSynthesis);
-  } else {
-    Reflect.deleteProperty(window, 'speechSynthesis');
+  constructor() {
+    FakeAudio.instances.push(this);
   }
-});
-
-function installSpeechSynthesis(initialVoices: SpeechSynthesisVoice[]) {
-  let voices = initialVoices;
-  let voicesChanged: EventListener | null = null;
-  let lastUtterance: FakeUtterance | null = null;
-  const synthesis = {
-    getVoices: vi.fn(() => voices),
-    cancel: vi.fn(),
-    speak: vi.fn((utterance: SpeechSynthesisUtterance) => {
-      lastUtterance = utterance as unknown as FakeUtterance;
-    }),
-    addEventListener: vi.fn((_type: string, listener: EventListener) => { voicesChanged = listener; }),
-    removeEventListener: vi.fn(() => { voicesChanged = null; })
-  } as unknown as SpeechSynthesis;
-  Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: synthesis });
-  vi.stubGlobal('SpeechSynthesisUtterance', FakeUtterance);
-
-  return {
-    synthesis,
-    utterance: () => lastUtterance,
-    setVoices: (nextVoices: SpeechSynthesisVoice[]) => { voices = nextVoices; },
-    emitVoicesChanged: () => voicesChanged?.(new Event('voiceschanged'))
-  };
 }
 
-function voice(lang: string, name: string, localService = true, isDefault = true): SpeechSynthesisVoice {
-  return { lang, name, default: isDefault, localService, voiceURI: `${name}-${lang}` } as SpeechSynthesisVoice;
-}
+const createObjectUrl = vi.fn(() => 'blob:yui-audio');
+const revokeObjectUrl = vi.fn();
+const urlDescriptor = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+const revokeDescriptor = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
 
 describe('PronunciationService', () => {
-  it('waits for voiceschanged and speaks using an available en-US voice at a measured rate', async () => {
-    const speech = installSpeechSynthesis([]);
-    const service = new PronunciationService();
-    const request = service.speak('  incentive  ');
+  let httpTesting: HttpTestingController;
+  let service: PronunciationService;
 
-    expect(service.isLoadingVoice()).toBe(true);
-    speech.setVoices([voice('en-GB', 'British voice'), voice('en-US', 'Any installed US voice')]);
-    speech.emitVoicesChanged();
-    await request;
+  beforeEach(() => {
+    vi.stubGlobal('Audio', FakeAudio);
+    FakeAudio.instances = [];
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl });
+    createObjectUrl.mockClear();
+    revokeObjectUrl.mockClear();
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    httpTesting = TestBed.inject(HttpTestingController);
+    service = TestBed.inject(PronunciationService);
+  });
 
-    expect(speech.synthesis.speak).toHaveBeenCalledOnce();
-    expect(speech.utterance()?.text).toBe('incentive');
-    expect(speech.utterance()?.lang).toBe('en-US');
-    expect(speech.utterance()?.voice?.name).toBe('Any installed US voice');
-    expect(speech.utterance()?.rate).toBe(0.95);
-    expect(speech.synthesis.cancel).toHaveBeenCalledOnce();
-
-    speech.utterance()?.onstart?.(new Event('start') as SpeechSynthesisEvent);
-    expect(service.isSpeaking()).toBe(true);
-    await service.speak('another word');
-    expect(speech.synthesis.speak).toHaveBeenCalledTimes(2);
-    expect(speech.synthesis.cancel).toHaveBeenCalledTimes(2);
+  afterEach(() => {
     service.stop();
-    expect(speech.synthesis.cancel).toHaveBeenCalledTimes(3);
+    httpTesting.verify();
+    window.localStorage.removeItem('yui.pronunciation.elevenlabsVoiceId');
+    vi.unstubAllGlobals();
+    if (urlDescriptor) Object.defineProperty(URL, 'createObjectURL', urlDescriptor);
+    else Reflect.deleteProperty(URL, 'createObjectURL');
+    if (revokeDescriptor) Object.defineProperty(URL, 'revokeObjectURL', revokeDescriptor);
+    else Reflect.deleteProperty(URL, 'revokeObjectURL');
+    TestBed.resetTestingModule();
+  });
+
+  it('loads account voices and persists a selected voice locally', () => {
+    service.loadVoices();
+    const request = httpTesting.expectOne('/api/pronunciation/voices');
+    request.flush({
+      defaultVoiceId: 'default-id',
+      voices: [
+        { voiceId: 'default-id', name: 'Configured voice' },
+        { voiceId: 'voice-1', name: 'Warm voice' }
+      ]
+    });
+
+    expect(service.voices()).toEqual([{ voiceId: 'voice-1', name: 'Warm voice' }]);
+    expect(service.defaultVoiceId()).toBe('default-id');
+    service.selectVoice('voice-1');
+    expect(window.localStorage.getItem('yui.pronunciation.elevenlabsVoiceId')).toBe('voice-1');
+  });
+
+  it('requests MP3 through the backend, plays it, and releases its object URL', async () => {
+    service.speak('  incentive  ');
+    expect(service.isLoadingVoice()).toBe(true);
+    const request = httpTesting.expectOne('/api/pronunciation');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ text: 'incentive', voiceId: null });
+    request.flush(new Blob(['mp3-data'], { type: 'audio/mpeg' }));
+    await vi.waitFor(() => expect(service.isSpeaking()).toBe(true));
+
+    expect(createObjectUrl).toHaveBeenCalledOnce();
+    FakeAudio.instances[0].onended?.(new Event('ended'));
     expect(service.isSpeaking()).toBe(false);
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:yui-audio');
   });
 
-  it('does not substitute another accent when en-US is unavailable', async () => {
-    vi.useFakeTimers();
-    const speech = installSpeechSynthesis([
-      voice('en-GB', 'British voice'),
-      voice('en-US', 'Cloud voice', false)
-    ]);
-    const service = new PronunciationService();
-    const request = service.speak('hello');
-    await vi.advanceTimersByTimeAsync(5_000);
-    await request;
+  it('uses the selected voice and cancels a pending backend request when stopped', () => {
+    service.loadVoices();
+    httpTesting.expectOne('/api/pronunciation/voices').flush({
+      defaultVoiceId: '',
+      voices: [{ voiceId: 'voice-2', name: 'Selected voice' }]
+    });
+    service.selectVoice('voice-2');
+    service.speak('hello');
+    const request = httpTesting.expectOne('/api/pronunciation');
+    expect(request.request.body).toEqual({ text: 'hello', voiceId: 'voice-2' });
 
-    expect(speech.synthesis.speak).not.toHaveBeenCalled();
-    expect(service.message()).toContain('No local en-US speech voice is available');
-    expect(service.message()).toContain('Cloud voice (en-US, remote)');
+    service.stop();
+    expect(request.cancelled).toBe(true);
+    expect(service.isLoadingVoice()).toBe(false);
   });
 
-  it('uses and persists the specifically selected local en-US voice', async () => {
-    const defaultVoice = voice('en-US', 'Male default voice', true, true);
-    const selectedVoice = voice('en-US', 'Female selected voice', true, false);
-    const speech = installSpeechSynthesis([defaultVoice, selectedVoice]);
-    const service = new PronunciationService();
-
-    const selectedId = service.voiceId(selectedVoice);
-    service.selectVoice(selectedId);
-    await service.speak('hello');
-
-    expect(service.localUsEnglishVoices().map((item) => item.name)).toEqual([
-      'Male default voice', 'Female selected voice'
-    ]);
-    expect(speech.utterance()?.voice?.name).toBe('Female selected voice');
-    expect(window.localStorage.getItem('yui.pronunciation.voiceURI')).toBe(selectedId);
+  it('shows safe backend error details without trying Web Speech API', async () => {
+    service.speak('hello');
+    httpTesting.expectOne('/api/pronunciation').flush(
+      new Blob([JSON.stringify({ detail: 'ElevenLabs rate or account quota limit was reached.' })], {
+        type: 'application/json'
+      }),
+      { status: 503, statusText: 'Service Unavailable' }
+    );
+    await vi.waitFor(() => expect(service.message()).toContain('quota limit'));
+    expect(service.isSpeaking()).toBe(false);
   });
 });

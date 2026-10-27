@@ -93,14 +93,6 @@ export class App implements OnInit, OnDestroy {
     return this.studyCards[this.studyIndex] ?? null;
   }
 
-  get pronunciationVoiceSelection(): string {
-    const voices = this.pronunciation.localUsEnglishVoices();
-    const selected = this.pronunciation.selectedVoiceId();
-    if (voices.some((voice) => this.pronunciation.voiceId(voice) === selected)) return selected;
-    const fallbackVoice = voices.find((voice) => voice.default) ?? voices[0];
-    return fallbackVoice ? this.pronunciation.voiceId(fallbackVoice) : '';
-  }
-
   startStudy(deck: Deck, event?: Event): void {
     event?.stopPropagation();
     this.studyGlobal = false;
@@ -349,6 +341,7 @@ export class App implements OnInit, OnDestroy {
     this.selectedDeck = null;
     this.cards = [];
     this.loadError = '';
+    this.pronunciation.loadVoices();
     this.changeDetector.markForCheck();
   }
 

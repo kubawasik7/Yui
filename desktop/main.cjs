@@ -13,9 +13,12 @@ const CONFIG_TEMPLATE = [
   'DATABASE_URL=jdbc:postgresql://localhost:5432/wordstead',
   'DATABASE_USER=wordstead',
   'GEMINI_MODEL=gemini-3.5-flash-lite',
+  'ELEVENLABS_VOICE_ID=',
+  'ELEVENLABS_MODEL_ID=eleven_flash_v2_5',
   '',
   '# Set DATABASE_PASSWORD in your Windows user environment for PostgreSQL.',
   '# GEMINI_API_KEY is optional and should also be set as a Windows user environment variable.',
+  '# ELEVENLABS_API_KEY must be set as a Windows user environment variable; never put it in this file.',
   ''
 ].join('\r\n');
 
@@ -81,7 +84,11 @@ function runtimeEnvironment(config, port) {
     DATABASE_USER: config.DATABASE_USER || process.env.DATABASE_USER || 'wordstead',
     DATABASE_PASSWORD: process.env.DATABASE_PASSWORD || '',
     GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
-    GEMINI_MODEL: config.GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite'
+    GEMINI_MODEL: config.GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+    ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY || '',
+    ELEVENLABS_VOICE_ID: config.ELEVENLABS_VOICE_ID || process.env.ELEVENLABS_VOICE_ID || '',
+    ELEVENLABS_MODEL_ID: config.ELEVENLABS_MODEL_ID || process.env.ELEVENLABS_MODEL_ID || 'eleven_flash_v2_5',
+    YUI_TTS_CACHE_DIR: path.join(app.getPath('userData'), 'audio-cache')
   };
 }
 

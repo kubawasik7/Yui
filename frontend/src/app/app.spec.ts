@@ -20,6 +20,7 @@ describe('App', () => {
     vi.useRealTimers();
     for (const request of httpTesting.match('/api/overview-stats')) request.flush(emptyOverviewStats());
     for (const request of httpTesting.match('/api/cards/due')) request.flush([]);
+    for (const request of httpTesting.match('/api/pronunciation')) expect(request.cancelled).toBe(true);
     httpTesting.verify();
   });
 
@@ -49,12 +50,13 @@ describe('App', () => {
     const settingsButton = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button.nav-item')]
       .find((button) => button.textContent?.includes('Settings'));
     settingsButton?.click();
+    httpTesting.expectOne('/api/pronunciation/voices').flush({ defaultVoiceId: 'configured-voice', voices: [] });
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('#settings-title')?.textContent).toContain('Settings');
     expect(compiled.querySelector('[aria-current="page"]')?.textContent).toContain('Settings');
-    expect(compiled.querySelector('[role="status"]')?.textContent).toContain('No local en-US voices');
+    expect(compiled.querySelector('#pronunciation-voice')?.textContent).toContain('configured-voice');
   });
 
   it('renders counts, seven-day review activity, and the FSRS forecast from overview statistics', () => {
@@ -279,6 +281,7 @@ describe('App', () => {
     pronunciationButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     expect(app.studyFlipped).toBe(false);
     pronunciationButton.click();
+    app.pronunciation.stop();
     expect(app.studyFlipped).toBe(false);
     expect(app.reviewSaving).toBe(false);
     expect(app.pendingReview).toBeNull();

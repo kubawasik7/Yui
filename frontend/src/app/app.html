@@ -204,13 +204,16 @@
             <div class="settings-panel-icon" aria-hidden="true">♫</div>
             <div class="settings-panel-copy">
               <p class="eyebrow">PRONUNCIATION</p>
-              <h2 id="voice-settings-title">English voice</h2>
-              <p>Choose an installed English (United States) voice. Your selection is saved on this device.</p>
-              @if (pronunciation.localUsEnglishVoices().length) {
-                <label class="settings-label" for="pronunciation-voice">Available en-US voices</label>
-                <select id="pronunciation-voice" class="settings-select" [ngModel]="pronunciationVoiceSelection" (ngModelChange)="pronunciation.selectVoice($event)">
-                  @for (voice of pronunciation.localUsEnglishVoices(); track pronunciation.voiceId(voice)) {
-                    <option [value]="pronunciation.voiceId(voice)">{{ voice.name }} — {{ voice.lang }}</option>
+              <h2 id="voice-settings-title">ElevenLabs voice</h2>
+              <p>Choose a voice available to your ElevenLabs account. Your selection is saved on this device.</p>
+              @if (pronunciation.isLoadingVoices()) {
+                <p class="settings-voice-empty" role="status">Loading available voices…</p>
+              } @else if (pronunciation.voices().length || pronunciation.defaultVoiceId()) {
+                <label class="settings-label" for="pronunciation-voice">Available voices</label>
+                <select id="pronunciation-voice" class="settings-select" [ngModel]="pronunciation.selectedVoiceForDisplay" (ngModelChange)="pronunciation.selectVoice($event)">
+                  <option value="">{{ pronunciation.defaultVoiceId() ? 'Use configured default (' + pronunciation.defaultVoiceId() + ')' : 'Select a voice' }}</option>
+                  @for (voice of pronunciation.voices(); track voice.voiceId) {
+                    <option [value]="voice.voiceId">{{ voice.name }}</option>
                   }
                 </select>
                 <button class="primary-button settings-test-button" type="button" (click)="toggleVoiceTest()">
@@ -218,9 +221,10 @@
                   {{ pronunciation.isSpeaking() || pronunciation.isLoadingVoice() ? 'Stop voice' : 'Test voice' }}
                 </button>
               } @else {
-                <p class="settings-voice-empty" role="status">No local en-US voices are available in Yui. Install an English (United States) voice in Windows, then restart the app.</p>
+                <p class="settings-voice-empty" role="status">No ElevenLabs voices are available yet. Configure ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID for the backend, then reload this list.</p>
+                <button class="secondary-button" type="button" (click)="pronunciation.loadVoices(true)">Reload voices</button>
               }
-              <p class="settings-privacy-note">Only local voices shown by your system are used. Flashcard text is not sent anywhere for playback.</p>
+              <p class="settings-privacy-note">Pronunciation text is sent by the local backend to ElevenLabs to generate audio. The API key stays in the backend process and is not included in Yui’s installer.</p>
             </div>
             <span class="settings-kanji" aria-hidden="true">結</span>
           </section>

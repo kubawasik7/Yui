@@ -1,116 +1,136 @@
-import { Injectable, OnDestroy, signal } from '@angular/core';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { Injectable, OnDestroy, inject, signal } from '@angular/core';
+import { Subscription } from 'rxjs';
 
-const VOICE_LOAD_TIMEOUT_MS = 5_000;
-const VOICE_STORAGE_KEY = 'yui.pronunciation.voiceURI';
+const VOICE_STORAGE_KEY = 'yui.pronunciation.elevenlabsVoiceId';
+
+export interface ElevenLabsVoiceOption {
+  voiceId: string;
+  name: string;
+}
+
+interface VoiceOptionsResponse {
+  defaultVoiceId: string;
+  voices: ElevenLabsVoiceOption[];
+}
 
 @Injectable({ providedIn: 'root' })
 export class PronunciationService implements OnDestroy {
   readonly isSpeaking = signal(false);
   readonly isLoadingVoice = signal(false);
+  readonly isLoadingVoices = signal(false);
   readonly activeText = signal('');
   readonly message = signal('');
-  readonly localUsEnglishVoices = signal<SpeechSynthesisVoice[]>([]);
-  readonly selectedVoiceId = signal('');
+  readonly voices = signal<ElevenLabsVoiceOption[]>([]);
+  readonly defaultVoiceId = signal('');
+  readonly selectedVoiceId = signal(this.readStoredVoiceId());
 
-  private readonly synthesis: SpeechSynthesis | null;
-  private availableVoices: SpeechSynthesisVoice[] = [];
+  private readonly http = inject(HttpClient);
+  private voicesLoaded = false;
+  private voiceRequest: Subscription | null = null;
+  private voicesRequest: Subscription | null = null;
+  private audio: HTMLAudioElement | null = null;
+  private objectUrl: string | null = null;
   private requestId = 0;
-  private cancelVoiceWait: (() => void) | null = null;
-  private readonly onVoicesChanged = () => this.refreshVoices();
-
-  constructor() {
-    this.selectedVoiceId.set(this.readStoredVoiceId());
-    this.synthesis = typeof window !== 'undefined' && 'speechSynthesis' in window
-      ? window.speechSynthesis
-      : null;
-    if (this.synthesis) {
-      this.refreshVoices();
-      this.synthesis.addEventListener('voiceschanged', this.onVoicesChanged);
-    }
-  }
 
   ngOnDestroy(): void {
-    this.synthesis?.removeEventListener('voiceschanged', this.onVoicesChanged);
     this.stop();
+    this.voicesRequest?.unsubscribe();
   }
 
   isBusyFor(text: string): boolean {
     return this.activeText() === text && (this.isSpeaking() || this.isLoadingVoice());
   }
 
-  voiceId(voice: SpeechSynthesisVoice): string {
-    return voice.voiceURI || `${voice.name}|${voice.lang}`;
+  get selectedVoiceForDisplay(): string {
+    const selected = this.selectedVoiceId();
+    return selected && this.voices().some((voice) => voice.voiceId === selected) ? selected : '';
+  }
+
+  loadVoices(force = false): void {
+    if (this.isLoadingVoices() || (this.voicesLoaded && !force)) return;
+    this.isLoadingVoices.set(true);
+    this.message.set('');
+    this.voicesRequest = this.http.get<VoiceOptionsResponse>('/api/pronunciation/voices').subscribe({
+      next: (response) => {
+        const defaultVoiceId = response.defaultVoiceId ?? '';
+        this.defaultVoiceId.set(defaultVoiceId);
+        this.voices.set((response.voices ?? []).filter((voice) => voice.voiceId !== defaultVoiceId));
+        this.voicesLoaded = true;
+        const selected = this.selectedVoiceId();
+        if (selected && !response.voices.some((voice) => voice.voiceId === selected)) {
+          this.selectVoice('');
+        }
+        this.isLoadingVoices.set(false);
+      },
+      error: (error: HttpErrorResponse) => {
+        this.isLoadingVoices.set(false);
+        this.message.set(this.voiceListError(error));
+      }
+    });
   }
 
   selectVoice(id: string): void {
-    if (!this.localUsEnglishVoices().some((voice) => this.voiceId(voice) === id)) return;
+    if (id && !this.voices().some((voice) => voice.voiceId === id)) return;
     this.selectedVoiceId.set(id);
     try {
-      window.localStorage.setItem(VOICE_STORAGE_KEY, id);
+      if (id) window.localStorage.setItem(VOICE_STORAGE_KEY, id);
+      else window.localStorage.removeItem(VOICE_STORAGE_KEY);
     } catch {
       // The selected voice remains active for this session if storage is unavailable.
     }
   }
 
-  async speak(rawText: string): Promise<void> {
+  speak(rawText: string): void {
     const text = rawText.trim();
     if (!text) return;
 
-    const synthesis = this.synthesis;
-    if (!synthesis || typeof SpeechSynthesisUtterance === 'undefined') {
-      this.message.set('Speech playback is not available in this app or system.');
-      return;
-    }
-
-    this.cancelVoiceWait?.();
-    this.cancelVoiceWait = null;
+    this.stop();
     const requestId = ++this.requestId;
-    synthesis.cancel();
-    this.resetPlaybackState();
     this.message.set('');
     this.activeText.set(text);
-
-    let voice = this.findPreferredUsEnglishVoice(this.refreshVoices());
-    if (!voice) {
-      this.isLoadingVoice.set(true);
-      const voices = await this.waitForUsEnglishVoice(synthesis);
-      if (requestId !== this.requestId) return;
-      voice = this.findPreferredUsEnglishVoice(voices);
-    }
-
-    if (requestId !== this.requestId) return;
-    this.isLoadingVoice.set(false);
-    if (!voice) {
-      this.activeText.set('');
-      this.message.set(this.noLocalVoiceMessage(this.availableVoices));
-      return;
-    }
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.voice = voice;
-    utterance.rate = 0.95;
-    utterance.onstart = () => {
-      if (requestId !== this.requestId) return;
-      this.isLoadingVoice.set(false);
-      this.isSpeaking.set(true);
-    };
-    utterance.onend = () => {
-      if (requestId === this.requestId) this.resetPlaybackState();
-    };
-    utterance.onerror = () => {
-      if (requestId !== this.requestId) return;
-      this.resetPlaybackState();
-      this.message.set('Yui could not play this pronunciation. Check Windows speech settings and try again.');
-    };
-    synthesis.speak(utterance);
+    this.isLoadingVoice.set(true);
+    const selectedVoice = this.selectedVoiceId() || null;
+    this.voiceRequest = this.http.post('/api/pronunciation', { text, voiceId: selectedVoice }, {
+      responseType: 'blob'
+    }).subscribe({
+      next: (blob) => {
+        if (requestId !== this.requestId) return;
+        if (!blob.size) {
+          this.failPlayback(requestId, 'ElevenLabs returned an empty audio file.');
+          return;
+        }
+        try {
+          this.objectUrl = URL.createObjectURL(blob);
+          const audio = new Audio(this.objectUrl);
+          this.audio = audio;
+          audio.onended = () => this.finishPlayback(requestId);
+          audio.onerror = () => this.failPlayback(requestId, 'Yui could not play the generated pronunciation audio.');
+          void audio.play().then(() => {
+            if (requestId !== this.requestId) return;
+            this.isLoadingVoice.set(false);
+            this.isSpeaking.set(true);
+          }).catch(() => this.failPlayback(requestId, 'Yui could not play the generated pronunciation audio.'));
+        } catch {
+          this.failPlayback(requestId, 'Yui could not play the generated pronunciation audio.');
+        }
+      },
+      error: (error: HttpErrorResponse) => {
+        if (requestId !== this.requestId) return;
+        this.isLoadingVoice.set(false);
+        this.activeText.set('');
+        void this.readBackendError(error).then((message) => {
+          if (requestId === this.requestId) this.message.set(message);
+        });
+      }
+    });
   }
 
   stop(): void {
     this.requestId++;
-    this.cancelVoiceWait?.();
-    this.cancelVoiceWait = null;
-    this.synthesis?.cancel();
+    this.voiceRequest?.unsubscribe();
+    this.voiceRequest = null;
+    this.releaseAudio();
     this.resetPlaybackState();
   }
 
@@ -118,24 +138,54 @@ export class PronunciationService implements OnDestroy {
     this.message.set('');
   }
 
-  private findPreferredUsEnglishVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
-    const candidates = voices.filter((voice) => voice.localService === true
-      && voice.lang.replace('_', '-').toLowerCase() === 'en-us');
-    const selectedId = this.selectedVoiceId();
-    return candidates.find((voice) => this.voiceId(voice) === selectedId)
-      ?? candidates.find((voice) => voice.default)
-      ?? candidates[0]
-      ?? null;
+  private finishPlayback(requestId: number): void {
+    if (requestId !== this.requestId) return;
+    this.releaseAudio();
+    this.resetPlaybackState();
   }
 
-  private refreshVoices(): SpeechSynthesisVoice[] {
-    const voices = this.synthesis?.getVoices() ?? [];
-    if (voices.length) {
-      this.availableVoices = voices;
-      this.localUsEnglishVoices.set(voices.filter((voice) => voice.localService === true
-        && voice.lang.replace('_', '-').toLowerCase() === 'en-us'));
+  private failPlayback(requestId: number, message: string): void {
+    if (requestId !== this.requestId) return;
+    this.releaseAudio();
+    this.resetPlaybackState();
+    this.message.set(message);
+  }
+
+  private releaseAudio(): void {
+    if (this.audio) {
+      this.audio.onended = null;
+      this.audio.onerror = null;
+      this.audio.pause();
+      this.audio.removeAttribute('src');
+      this.audio.load();
+      this.audio = null;
     }
-    return this.availableVoices;
+    if (this.objectUrl) {
+      URL.revokeObjectURL(this.objectUrl);
+      this.objectUrl = null;
+    }
+  }
+
+  private async readBackendError(error: HttpErrorResponse): Promise<string> {
+    const fallback = error.status === 0
+      ? 'Could not connect to the Yui backend. Check that the app is running and try again.'
+      : 'Yui could not generate pronunciation audio. Check ElevenLabs settings, voice access, quota, and network.';
+    try {
+      let detail: unknown = error.error;
+      if (detail instanceof Blob) detail = await detail.text();
+      if (typeof detail === 'string') detail = JSON.parse(detail);
+      if (detail && typeof detail === 'object' && 'detail' in detail
+        && typeof detail.detail === 'string' && detail.detail.trim()) return detail.detail;
+    } catch {
+      // Use a safe generic message if the backend returned an unreadable error body.
+    }
+    return fallback;
+  }
+
+  private voiceListError(error: HttpErrorResponse): string {
+    if (error.status === 0) return 'Could not connect to the Yui backend to load ElevenLabs voices.';
+    if (error.status === 503) return 'ElevenLabs is not configured or the API key was rejected. Set ELEVENLABS_API_KEY for the backend and restart Yui.';
+    return 'ElevenLabs voices could not be loaded. Check the backend log and try again.';
   }
 
   private readStoredVoiceId(): string {
@@ -144,41 +194,6 @@ export class PronunciationService implements OnDestroy {
     } catch {
       return '';
     }
-  }
-
-  private noLocalVoiceMessage(voices: SpeechSynthesisVoice[]): string {
-    const location = (voice: SpeechSynthesisVoice) => voice.localService === true
-      ? 'local'
-      : voice.localService === false ? 'remote' : 'location unknown';
-    const detected = voices.length
-      ? ` Electron reports: ${voices.slice(0, 6).map((voice) =>
-        `${voice.name} (${voice.lang}, ${location(voice)})`).join('; ')}.`
-      : ' Electron did not report any speech voices.';
-    return `No local en-US speech voice is available.${detected} Yui only uses local voices so flashcard text stays on this device. Install a local English (United States) voice that appears in Electron, then restart Yui.`;
-  }
-
-  private waitForUsEnglishVoice(synthesis: SpeechSynthesis): Promise<SpeechSynthesisVoice[]> {
-    return new Promise((resolve) => {
-      let settled = false;
-      let timeoutId: ReturnType<typeof setTimeout>;
-      const finish = (voices: SpeechSynthesisVoice[]) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeoutId);
-        synthesis.removeEventListener('voiceschanged', onVoicesChanged);
-        this.cancelVoiceWait = null;
-        resolve(voices);
-      };
-      const onVoicesChanged = () => {
-        const voices = this.refreshVoices();
-        if (this.findPreferredUsEnglishVoice(voices)) finish(voices);
-      };
-
-      synthesis.addEventListener('voiceschanged', onVoicesChanged);
-      timeoutId = setTimeout(() => finish(this.refreshVoices()), VOICE_LOAD_TIMEOUT_MS);
-      this.cancelVoiceWait = () => finish(this.refreshVoices());
-      onVoicesChanged();
-    });
   }
 
   private resetPlaybackState(): void {
