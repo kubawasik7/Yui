@@ -50,6 +50,12 @@
           <button type="button" aria-label="Dismiss message" (click)="notice = ''">×</button>
         </div>
       }
+      @if (pronunciation.message(); as pronunciationMessage) {
+        <div class="pronunciation-message" role="status">
+          <span>{{ pronunciationMessage }}</span>
+          <button type="button" aria-label="Dismiss pronunciation message" (click)="pronunciation.clearMessage()">×</button>
+        </div>
+      }
       @if (backgroundSuggestionCardIds.size > 0) {
         <div class="notice" role="status">
           <span>AI is completing details for {{ backgroundSuggestionCardIds.size }} saved card(s) in the background. You can keep adding cards.</span>
@@ -88,13 +94,13 @@
           <div class="loading-state" role="status">Loading cards due for review…</div>
         } @else if (currentStudyCard; as studyCard) {
           <section class="study-stage" aria-label="Flashcard study">
-            <button class="study-flashcard" type="button" [class.is-flipped]="studyFlipped" (click)="flipStudyCard()" [attr.aria-label]="studyFlipped ? 'Show card front' : 'Flip card to reveal answer'">
-              <span class="study-face study-front"><span class="study-face-label">PROMPT <span>結</span></span><strong>{{ studyCard.front }}</strong><small>Click or press space to reveal</small></span>
+            <div class="study-flashcard" role="group" tabindex="0" [class.is-flipped]="studyFlipped" (click)="flipStudyCard()" (keydown.enter)="flipStudyCard()" [attr.aria-label]="studyFlipped ? 'Answer side of flashcard' : 'Prompt side of flashcard'">
+              <span class="study-face study-front"><span class="study-face-label">PROMPT <span>結</span></span><span class="study-front-word"><strong>{{ studyCard.front }}</strong><button class="pronunciation-button" type="button" [attr.aria-label]="pronunciation.isBusyFor(studyCard.front) ? 'Stop pronunciation' : 'Play en-US pronunciation'" [attr.title]="pronunciation.isBusyFor(studyCard.front) ? 'Stop pronunciation' : 'Play pronunciation'" (click)="togglePronunciation(studyCard.front, $event)" (keydown.enter)="$event.stopPropagation()"><span aria-hidden="true">{{ pronunciation.isBusyFor(studyCard.front) ? '■' : '🔊' }}</span></button></span><small>Click or press space to reveal</small></span>
               <span class="study-face study-back"><span class="study-face-label">ANSWER <span>YUI</span></span><strong>{{ studyCard.back }}</strong>
                 @if (studyCard.example) { <small class="study-example">“{{ studyCard.example }}”</small> }
                 @if (studyCard.mnemonic) { <small class="study-mnemonic">✳ {{ studyCard.mnemonic }}</small> }
               </span>
-            </button>
+            </div>
             <div class="study-controls">
               @if (studyFlipped) {
                 <span><kbd>Space</kbd> Remembered <span class="shortcut-divider">·</span> <kbd>F</kbd> Not remembered</span>
@@ -151,7 +157,7 @@
               <article class="flashcard-row">
                 <div class="flashcard-content">
                   <div class="flashcard-sides">
-                    <div><span class="field-label">FRONT</span><h3>{{ card.front }}</h3></div>
+                    <div><span class="field-label">FRONT</span><div class="card-front-word"><h3>{{ card.front }}</h3><button class="pronunciation-button" type="button" [attr.aria-label]="pronunciation.isBusyFor(card.front) ? 'Stop pronunciation' : 'Play en-US pronunciation'" [attr.title]="pronunciation.isBusyFor(card.front) ? 'Stop pronunciation' : 'Play pronunciation'" (click)="togglePronunciation(card.front, $event)"><span aria-hidden="true">{{ pronunciation.isBusyFor(card.front) ? '■' : '🔊' }}</span></button></div></div>
                     <span class="side-arrow" aria-hidden="true">→</span>
                     <div>
                       <span class="field-label">BACK</span>

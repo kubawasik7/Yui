@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subscription, finalize, of, switchMap, timeout } from 'rxjs';
+import { PronunciationService } from './pronunciation.service';
 import {
   Deck,
   Flashcard,
@@ -20,6 +21,7 @@ import {
 })
 export class App implements OnInit, OnDestroy {
   private readonly api = inject(FlashcardApiService);
+  readonly pronunciation = inject(PronunciationService);
   private readonly changeDetector = inject(ChangeDetectorRef);
 
   decks: Deck[] = [];
@@ -135,6 +137,12 @@ export class App implements OnInit, OnDestroy {
     if (this.currentStudyCard) this.studyFlipped = !this.studyFlipped;
   }
 
+  togglePronunciation(text: string, event: Event): void {
+    event.stopPropagation();
+    if (this.pronunciation.isBusyFor(text)) this.pronunciation.stop();
+    else void this.pronunciation.speak(text);
+  }
+
   rateStudyCard(answer: ReviewAnswer): void {
     const card = this.currentStudyCard;
     if (!card || !this.studyFlipped || this.reviewSaving) return;
@@ -203,6 +211,7 @@ export class App implements OnInit, OnDestroy {
     if (!this.studyMode) return;
     const target = event.target;
     if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+    if (target instanceof HTMLElement && target.closest('.pronunciation-button')) return;
 
     if (event.code === 'Space') {
       event.preventDefault();

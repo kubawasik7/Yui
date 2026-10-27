@@ -258,6 +258,13 @@ describe('App', () => {
     expect(app.studyDeckName).toBe('All decks');
     expect(fixture.nativeElement.querySelector('.study-heading .eyebrow')?.textContent?.trim()).toBe('STUDY');
     expect(fixture.nativeElement.querySelector('.study-mnemonic')?.textContent).toContain('A bright image');
+    const pronunciationButton = fixture.nativeElement.querySelector('.study-front .pronunciation-button') as HTMLButtonElement;
+    pronunciationButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(app.studyFlipped).toBe(false);
+    pronunciationButton.click();
+    expect(app.studyFlipped).toBe(false);
+    expect(app.reviewSaving).toBe(false);
+    expect(app.pendingReview).toBeNull();
 
     app.studyFlipped = true;
     app.rateStudyCard('REMEMBERED');

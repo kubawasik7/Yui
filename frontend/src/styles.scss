@@ -88,3 +88,56 @@ button, a { -webkit-tap-highlight-color: transparent; }
   font-size: 12px;
   line-height: 1.55;
 }
+
+.pronunciation-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 13px;
+  border: 1px solid #ff2e6340;
+  border-radius: 8px;
+  background: #ff2e6310;
+  color: #ffb2c4;
+  font-size: 12px;
+}
+
+.pronunciation-message button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.study-front-word,
+.card-front-word {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 12px;
+}
+
+.study-front-word { justify-content: center; }
+.card-front-word { justify-content: flex-start; }
+.card-front-word h3 { min-width: 0; margin: 7px 0 0; }
+
+.pronunciation-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #ff2e6350;
+  border-radius: 9px;
+  background: #ff2e6314;
+  color: var(--sakura);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background .15s, box-shadow .15s, transform .15s;
+}
+
+.study-front-word .pronunciation-button { width: 40px; height: 40px; }
+.pronunciation-button:hover { transform: translateY(-1px); background: #ff2e6324; box-shadow: 0 0 12px #ff2e6326; }
+.pronunciation-button:focus-visible { outline: 2px solid var(--sakura); outline-offset: 3px; }
