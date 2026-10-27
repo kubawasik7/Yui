@@ -53,7 +53,7 @@ export class PronunciationService {
     this.isLoadingVoice.set(false);
     if (!voice) {
       this.activeText.set('');
-      this.message.set('No en-US speech voice is available. Install an English (United States) speech voice in Windows settings, then restart Yui.');
+      this.message.set('No local en-US speech voice is available. Install a local English (United States) voice in Windows settings, then restart Yui.');
       return;
     }
 
@@ -90,7 +90,8 @@ export class PronunciationService {
   }
 
   private findUsEnglishVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
-    const candidates = voices.filter((voice) => voice.lang.replace('_', '-').toLowerCase() === 'en-us');
+    const candidates = voices.filter((voice) => voice.localService === true
+      && voice.lang.replace('_', '-').toLowerCase() === 'en-us');
     return candidates.find((voice) => voice.default) ?? candidates[0] ?? null;
   }
 

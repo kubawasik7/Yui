@@ -48,8 +48,8 @@ function installSpeechSynthesis(initialVoices: SpeechSynthesisVoice[]) {
   };
 }
 
-function voice(lang: string, name: string): SpeechSynthesisVoice {
-  return { lang, name, default: true } as SpeechSynthesisVoice;
+function voice(lang: string, name: string, localService = true): SpeechSynthesisVoice {
+  return { lang, name, default: true, localService } as SpeechSynthesisVoice;
 }
 
 describe('PronunciationService', () => {
@@ -82,13 +82,16 @@ describe('PronunciationService', () => {
 
   it('does not substitute another accent when en-US is unavailable', async () => {
     vi.useFakeTimers();
-    const speech = installSpeechSynthesis([voice('en-GB', 'British voice')]);
+    const speech = installSpeechSynthesis([
+      voice('en-GB', 'British voice'),
+      voice('en-US', 'Cloud voice', false)
+    ]);
     const service = new PronunciationService();
     const request = service.speak('hello');
     await vi.advanceTimersByTimeAsync(1_500);
     await request;
 
     expect(speech.synthesis.speak).not.toHaveBeenCalled();
-    expect(service.message()).toContain('No en-US speech voice is available');
+    expect(service.message()).toContain('No local en-US speech voice is available');
   });
 });
