@@ -1,22 +1,33 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, OnDestroy, signal } from '@angular/core';
 
-const VOICE_LOAD_TIMEOUT_MS = 1_500;
+const VOICE_LOAD_TIMEOUT_MS = 5_000;
 
 @Injectable({ providedIn: 'root' })
-export class PronunciationService {
+export class PronunciationService implements OnDestroy {
   readonly isSpeaking = signal(false);
   readonly isLoadingVoice = signal(false);
   readonly activeText = signal('');
   readonly message = signal('');
 
   private readonly synthesis: SpeechSynthesis | null;
+  private availableVoices: SpeechSynthesisVoice[] = [];
   private requestId = 0;
   private cancelVoiceWait: (() => void) | null = null;
+  private readonly onVoicesChanged = () => this.refreshVoices();
 
   constructor() {
     this.synthesis = typeof window !== 'undefined' && 'speechSynthesis' in window
       ? window.speechSynthesis
       : null;
+    if (this.synthesis) {
+      this.refreshVoices();
+      this.synthesis.addEventListener('voiceschanged', this.onVoicesChanged);
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.synthesis?.removeEventListener('voiceschanged', this.onVoicesChanged);
+    this.stop();
   }
 
   isBusyFor(text: string): boolean {
@@ -41,7 +52,7 @@ export class PronunciationService {
     this.message.set('');
     this.activeText.set(text);
 
-    let voice = this.findUsEnglishVoice(synthesis.getVoices());
+    let voice = this.findUsEnglishVoice(this.refreshVoices());
     if (!voice) {
       this.isLoadingVoice.set(true);
       const voices = await this.waitForUsEnglishVoice(synthesis);
@@ -53,7 +64,7 @@ export class PronunciationService {
     this.isLoadingVoice.set(false);
     if (!voice) {
       this.activeText.set('');
-      this.message.set('No local en-US speech voice is available. Install a local English (United States) voice in Windows settings, then restart Yui.');
+      this.message.set(this.noLocalVoiceMessage(this.availableVoices));
       return;
     }
 
@@ -95,6 +106,23 @@ export class PronunciationService {
     return candidates.find((voice) => voice.default) ?? candidates[0] ?? null;
   }
 
+  private refreshVoices(): SpeechSynthesisVoice[] {
+    const voices = this.synthesis?.getVoices() ?? [];
+    if (voices.length) this.availableVoices = voices;
+    return this.availableVoices;
+  }
+
+  private noLocalVoiceMessage(voices: SpeechSynthesisVoice[]): string {
+    const location = (voice: SpeechSynthesisVoice) => voice.localService === true
+      ? 'local'
+      : voice.localService === false ? 'remote' : 'location unknown';
+    const detected = voices.length
+      ? ` Electron reports: ${voices.slice(0, 6).map((voice) =>
+        `${voice.name} (${voice.lang}, ${location(voice)})`).join('; ')}.`
+      : ' Electron did not report any speech voices.';
+    return `No local en-US speech voice is available.${detected} Yui only uses local voices so flashcard text stays on this device. Install a local English (United States) voice that appears in Electron, then restart Yui.`;
+  }
+
   private waitForUsEnglishVoice(synthesis: SpeechSynthesis): Promise<SpeechSynthesisVoice[]> {
     return new Promise((resolve) => {
       let settled = false;
@@ -108,13 +136,13 @@ export class PronunciationService {
         resolve(voices);
       };
       const onVoicesChanged = () => {
-        const voices = synthesis.getVoices();
+        const voices = this.refreshVoices();
         if (this.findUsEnglishVoice(voices)) finish(voices);
       };
 
       synthesis.addEventListener('voiceschanged', onVoicesChanged);
-      timeoutId = setTimeout(() => finish(synthesis.getVoices()), VOICE_LOAD_TIMEOUT_MS);
-      this.cancelVoiceWait = () => finish(synthesis.getVoices());
+      timeoutId = setTimeout(() => finish(this.refreshVoices()), VOICE_LOAD_TIMEOUT_MS);
+      this.cancelVoiceWait = () => finish(this.refreshVoices());
       onVoicesChanged();
     });
   }

@@ -88,10 +88,11 @@ describe('PronunciationService', () => {
     ]);
     const service = new PronunciationService();
     const request = service.speak('hello');
-    await vi.advanceTimersByTimeAsync(1_500);
+    await vi.advanceTimersByTimeAsync(5_000);
     await request;
 
     expect(speech.synthesis.speak).not.toHaveBeenCalled();
     expect(service.message()).toContain('No local en-US speech voice is available');
+    expect(service.message()).toContain('Cloud voice (en-US, remote)');
   });
 });
