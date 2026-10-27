@@ -230,7 +230,7 @@ describe('App', () => {
     expect(fixture.componentInstance.studyMode).toBe(true);
   });
 
-  it('Focus Session loads due cards from all decks and submits using each card’s deck', () => {
+  it('Study loads due cards from every deck, displays the mnemonic, and reviews through the card’s deck', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     const decks: Deck[] = [
@@ -249,11 +249,15 @@ describe('App', () => {
     app.startFirstStudy();
     httpTesting.expectOne('/api/cards/due').flush([{
       id: 'card-2', deckId: 'deck-2', front: 'second', back: 'drugi', example: null,
-      mnemonic: null, notes: null, state: 'LEARNING', stability: null, difficulty: null,
+      mnemonic: 'A bright image to remember the word', notes: null, state: 'LEARNING', stability: null, difficulty: null,
       dueAt: '2026-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
       createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
     }]);
     expect(app.currentStudyCard?.deckId).toBe('deck-2');
+    fixture.detectChanges();
+    expect(app.studyDeckName).toBe('All decks');
+    expect(fixture.nativeElement.querySelector('.study-heading .eyebrow')?.textContent?.trim()).toBe('STUDY');
+    expect(fixture.nativeElement.querySelector('.study-mnemonic')?.textContent).toContain('A bright image');
 
     app.studyFlipped = true;
     app.rateStudyCard('REMEMBERED');

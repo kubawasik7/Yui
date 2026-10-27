@@ -321,7 +321,7 @@ export class App implements OnInit, OnDestroy {
   startFirstStudy(): void {
     this.studyGlobal = true;
     this.activeSection = 'study';
-    this.studyDeckName = 'Focus Session';
+    this.studyDeckName = 'All decks';
     this.searchQuery = '';
     this.studyCards = [];
     this.studyIndex = 0;
