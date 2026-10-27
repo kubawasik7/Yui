@@ -65,7 +65,7 @@ export class PronunciationService implements OnDestroy {
       },
       error: (error: HttpErrorResponse) => {
         this.isLoadingVoices.set(false);
-        this.message.set(this.voiceListError(error));
+        void this.voiceListError(error).then((message) => this.message.set(message));
       }
     });
   }
@@ -166,10 +166,12 @@ export class PronunciationService implements OnDestroy {
     }
   }
 
-  private async readBackendError(error: HttpErrorResponse): Promise<string> {
-    const fallback = error.status === 0
+  private async readBackendError(
+    error: HttpErrorResponse,
+    fallback = error.status === 0
       ? 'Could not connect to the Yui backend. Check that the app is running and try again.'
-      : 'Yui could not generate pronunciation audio. Check ElevenLabs settings, voice access, quota, and network.';
+      : 'Yui could not generate pronunciation audio. Check ElevenLabs settings, voice access, quota, and network.'
+  ): Promise<string> {
     try {
       let detail: unknown = error.error;
       if (detail instanceof Blob) detail = await detail.text();
@@ -182,10 +184,11 @@ export class PronunciationService implements OnDestroy {
     return fallback;
   }
 
-  private voiceListError(error: HttpErrorResponse): string {
-    if (error.status === 0) return 'Could not connect to the Yui backend to load ElevenLabs voices.';
-    if (error.status === 503) return 'ElevenLabs is not configured or the API key was rejected. Set ELEVENLABS_API_KEY for the backend and restart Yui.';
-    return 'ElevenLabs voices could not be loaded. Check the backend log and try again.';
+  private voiceListError(error: HttpErrorResponse): Promise<string> {
+    const fallback = error.status === 0
+      ? 'Could not connect to the Yui backend to load ElevenLabs voices.'
+      : 'ElevenLabs voices could not be loaded. Check the backend log and try again.';
+    return this.readBackendError(error, fallback);
   }
 
   private readStoredVoiceId(): string {

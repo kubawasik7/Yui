@@ -190,9 +190,13 @@ public class ElevenLabsTtsService {
     }
 
     private TtsException providerException(int status) {
-        if (status == 401 || status == 403) {
-            return new TtsException(SERVICE_UNAVAILABLE,
-                    "ElevenLabs rejected the API key or the selected voice is not available to this account.");
+        if (status == 401) {
+            return new TtsException(BAD_GATEWAY,
+                    "ElevenLabs returned HTTP 401 and rejected ELEVENLABS_API_KEY. Create a valid API key in ElevenLabs, update the Windows user environment variable, and restart Yui.");
+        }
+        if (status == 403) {
+            return new TtsException(BAD_GATEWAY,
+                    "ElevenLabs returned HTTP 403. Check that the API key is authorized for voice listing and text-to-speech, and review any IP restrictions.");
         }
         if (status == 404) {
             return new TtsException(BAD_GATEWAY,

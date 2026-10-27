@@ -221,7 +221,7 @@
                   {{ pronunciation.isSpeaking() || pronunciation.isLoadingVoice() ? 'Stop voice' : 'Test voice' }}
                 </button>
               } @else {
-                <p class="settings-voice-empty" role="status">No ElevenLabs voices are available yet. Configure ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID for the backend, then reload this list.</p>
+                <p class="settings-voice-empty" role="status">No ElevenLabs voices are available. Check the status message above, fix the reported issue, then reload this list.</p>
                 <button class="secondary-button" type="button" (click)="pronunciation.loadVoices(true)">Reload voices</button>
               }
               <p class="settings-privacy-note">Pronunciation text is sent by the local backend to ElevenLabs to generate audio. The API key stays in the backend process and is not included in Yui’s installer.</p>

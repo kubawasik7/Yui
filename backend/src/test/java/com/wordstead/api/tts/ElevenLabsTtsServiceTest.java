@@ -126,7 +126,7 @@ class ElevenLabsTtsServiceTest {
 
         assertThatThrownBy(() -> invalidKeyService.synthesize(new PronunciationRequest("hello", null)))
                 .isInstanceOf(TtsException.class)
-                .hasMessageContaining("rejected the API key")
+                .hasMessageContaining("HTTP 401 and rejected ELEVENLABS_API_KEY")
                 .hasMessageNotContaining("private authentication response")
                 .hasMessageNotContaining("secret-test-key");
         invalidKeyServer.verify();

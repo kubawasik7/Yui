@@ -110,4 +110,14 @@ describe('PronunciationService', () => {
     await vi.waitFor(() => expect(service.message()).toContain('quota limit'));
     expect(service.isSpeaking()).toBe(false);
   });
+
+  it('shows the precise backend authentication error when account voices cannot be loaded', async () => {
+    service.loadVoices();
+    httpTesting.expectOne('/api/pronunciation/voices').flush({
+      detail: 'ElevenLabs returned HTTP 401 and rejected ELEVENLABS_API_KEY.'
+    }, { status: 502, statusText: 'Bad Gateway' });
+
+    await vi.waitFor(() => expect(service.message()).toContain('HTTP 401'));
+    expect(service.message()).toContain('ELEVENLABS_API_KEY');
+  });
 });
