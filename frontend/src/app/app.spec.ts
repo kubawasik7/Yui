@@ -226,7 +226,7 @@ describe('App', () => {
     expect(app.backgroundSuggestionMessage).toContain('incentive');
   });
 
-  it('starts a deck session with all cards, including new and not-yet-due cards', () => {
+  it('starts a deck session with new cards while future-due cards stay out of today’s queue', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     const deck: Deck = {
@@ -236,14 +236,14 @@ describe('App', () => {
     httpTesting.expectOne('/api/decks').flush([deck]);
 
     fixture.componentInstance.startStudy(deck);
+    httpTesting.expectOne((request) => request.url === '/api/decks/deck-1/cards' && request.params.get('dueOnly') === 'true').flush([]);
     const newCard: Flashcard = {
       id: 'card-1', deckId: deck.id, front: 'to board', back: 'wsiadać', example: null,
       mnemonic: null, notes: null, fsrsActive: false, state: 'LEARNING', stability: null, difficulty: null,
       dueAt: '2027-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
       createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
     };
-    httpTesting.expectOne('/api/decks/deck-1/cards').flush([newCard, { ...newCard }]);
-    httpTesting.expectOne((request) => request.url === '/api/decks/deck-1/cards' && request.params.get('dueOnly') === 'true').flush([]);
+    httpTesting.expectOne('/api/decks/deck-1/cards/new').flush([newCard, { ...newCard }]);
 
     expect(fixture.componentInstance.studyCards).toHaveLength(1);
     expect(fixture.componentInstance.currentStudyCard?.fsrsActive).toBe(false);
@@ -267,27 +267,19 @@ describe('App', () => {
 
     const app = fixture.componentInstance;
     app.startStudyAllCards();
-    httpTesting.expectOne('/api/decks/deck-1/cards').flush([]);
     httpTesting.expectOne('/api/cards/due').flush([{
       id: 'card-2', deckId: 'deck-2', front: 'second', back: 'drugi', example: null,
       mnemonic: 'A bright image to remember the word', notes: null, fsrsActive: true, state: 'REVIEW', stability: 4, difficulty: 4,
       dueAt: '2026-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
       createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
     }]);
-    httpTesting.expectOne('/api/decks/deck-2/cards').flush([
-      {
-        id: 'card-2', deckId: 'deck-2', front: 'second', back: 'drugi', example: null,
-        mnemonic: 'A bright image to remember the word', notes: null, fsrsActive: true, state: 'REVIEW', stability: 4, difficulty: 4,
-        dueAt: '2026-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
-        createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
-      },
-      {
-        id: 'new-card', deckId: 'deck-2', front: 'new word', back: 'nowe słowo', example: null,
-        mnemonic: null, notes: null, fsrsActive: false, state: 'LEARNING', stability: null, difficulty: null,
-        dueAt: '2026-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
-        createdAt: '2026-10-24T10:00:00Z', updatedAt: '2026-10-24T10:00:00Z'
-      }
-    ]);
+    const newCard: Flashcard = {
+      id: 'new-card', deckId: 'deck-2', front: 'new word', back: 'nowe słowo', example: null,
+      mnemonic: null, notes: null, fsrsActive: false, state: 'LEARNING', stability: null, difficulty: null,
+      dueAt: '2026-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
+      createdAt: '2026-10-24T10:00:00Z', updatedAt: '2026-10-24T10:00:00Z'
+    };
+    httpTesting.expectOne('/api/cards/new').flush([newCard, { ...newCard }]);
     expect(app.studyCards.map((card) => card.id)).toEqual(['card-2', 'new-card']);
     expect(app.currentStudyCard?.deckId).toBe('deck-2');
     fixture.detectChanges();
@@ -325,7 +317,7 @@ describe('App', () => {
     };
     httpTesting.expectOne('/api/decks').flush([deck]);
     fixture.componentInstance.startStudy(deck);
-    httpTesting.expectOne('/api/decks/deck-1/cards').flush([
+    httpTesting.expectOne((request) => request.url === '/api/decks/deck-1/cards' && request.params.get('dueOnly') === 'true').flush([
       {
         id: 'card-1', deckId: deck.id, front: 'to board', back: 'wsiadać', example: null,
         mnemonic: null, notes: null, fsrsActive: true, state: 'LEARNING', stability: null, difficulty: null,
@@ -339,16 +331,7 @@ describe('App', () => {
         createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
       }
     ]);
-    httpTesting.expectOne((request) => request.url === '/api/decks/deck-1/cards' && request.params.get('dueOnly') === 'true').flush([
-      { id: 'card-1', deckId: deck.id, front: 'to board', back: 'wsiadać', example: null,
-        mnemonic: null, notes: null, fsrsActive: true, state: 'LEARNING', stability: null, difficulty: null,
-        dueAt: '2026-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
-        createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z' },
-      { id: 'card-2', deckId: deck.id, front: '忘れる', back: 'forget', example: null,
-        mnemonic: null, notes: null, fsrsActive: true, state: 'LEARNING', stability: null, difficulty: null,
-        dueAt: '2026-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
-        createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z' }
-    ]);
+    httpTesting.expectOne('/api/decks/deck-1/cards/new').flush([]);
 
     const app = fixture.componentInstance;
     app.studyFlipped = true;
@@ -396,7 +379,8 @@ describe('App', () => {
     httpTesting.expectOne('/api/decks').flush([deck]);
     const app = fixture.componentInstance;
     app.startStudyAllCards();
-    httpTesting.expectOne('/api/decks/deck-1/cards').flush([
+    httpTesting.expectOne('/api/cards/due').flush([]);
+    httpTesting.expectOne('/api/cards/new').flush([
       {
         id: 'new-1', deckId: 'deck-1', front: 'apple', back: 'jabłko', example: null,
         mnemonic: null, notes: null, fsrsActive: false, state: 'LEARNING', stability: null, difficulty: null,
@@ -410,8 +394,6 @@ describe('App', () => {
         createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
       }
     ]);
-    httpTesting.expectOne('/api/cards/due').flush([]);
-
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelectorAll('button.nav-item').length).toBe(4);
     expect(fixture.nativeElement.querySelector('button.nav-item.active')?.textContent).toContain('Study');
@@ -453,8 +435,8 @@ describe('App', () => {
     const secondCard: Flashcard = { ...firstCard, id: 'card-2', front: 'forget', back: 'zapomnieć' };
     const app = fixture.componentInstance;
     app.startStudy(deck);
-    httpTesting.expectOne('/api/decks/deck-1/cards').flush([firstCard, secondCard]);
     httpTesting.expectOne((request) => request.url === '/api/decks/deck-1/cards' && request.params.get('dueOnly') === 'true').flush([firstCard, secondCard]);
+    httpTesting.expectOne('/api/decks/deck-1/cards/new').flush([]);
     fixture.detectChanges();
 
     const pressOnStudyCard = (code: string): KeyboardEvent => {

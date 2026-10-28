@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
 
 import com.wordstead.api.decks.Deck;
 import com.wordstead.api.decks.DeckRepository;
+import org.springframework.data.domain.PageRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -95,8 +96,11 @@ class CardControllerTest {
                 "{\"front\":\"first\",\"back\":\"pierwszy\"}").body());
         UUID secondCardId = extractId(request("POST", "/api/decks/" + secondDeckId + "/cards",
                 "{\"front\":\"second\",\"back\":\"drugi\"}").body());
+        UUID thirdCardId = extractId(request("POST", "/api/decks/" + secondDeckId + "/cards",
+                "{\"front\":\"third\",\"back\":\"trzeci\"}").body());
         assertEquals(200, activate(firstDeckId, firstCardId).statusCode());
         assertEquals(200, activate(secondDeckId, secondCardId).statusCode());
+        assertEquals(200, activate(secondDeckId, thirdCardId).statusCode());
         jdbcTemplate.update("UPDATE cards SET due_at = ? WHERE id = ?",
                 Timestamp.from(Instant.now().plusSeconds(3600)), secondCardId);
 
@@ -104,14 +108,43 @@ class CardControllerTest {
 
         assertEquals(200, globalDue.statusCode());
         assertTrue(globalDue.body().contains(firstCardId.toString()));
-        assertTrue(globalDue.body().contains(secondCardId.toString()));
-        assertTrue(globalDue.body().contains(secondDeckId.toString()));
+        assertTrue(globalDue.body().contains(thirdCardId.toString()));
+        assertTrue(!globalDue.body().contains(secondCardId.toString()), "A future-due active card is not part of today's queue");
         HttpResponse<String> firstDeckDue = request("GET", "/api/decks/" + firstDeckId + "/cards?dueOnly=true", null);
         HttpResponse<String> secondDeckDue = request("GET", "/api/decks/" + secondDeckId + "/cards?dueOnly=true", null);
         assertTrue(firstDeckDue.body().contains(firstCardId.toString()));
         assertTrue(!firstDeckDue.body().contains(secondCardId.toString()));
-        assertTrue(secondDeckDue.body().contains(secondCardId.toString()));
+        assertTrue(!secondDeckDue.body().contains(secondCardId.toString()));
+        assertTrue(secondDeckDue.body().contains(thirdCardId.toString()));
         assertTrue(!secondDeckDue.body().contains(firstCardId.toString()));
+    }
+
+    @Test
+    void dueQueueUsesFsrsDueAtAndExcludesFutureActiveAndNewCards() {
+        Deck deck = deckRepository.save(new Deck("Due date cases", null));
+        Instant now = Instant.parse("2026-10-28T10:00:00Z");
+        Flashcard overdue = scheduledCard(deck, now.minus(Duration.ofDays(1)), now.minus(Duration.ofDays(2)));
+        Flashcard dueNow = scheduledCard(deck, now, now.minus(Duration.ofDays(1)));
+        Flashcard dueInThreeDays = scheduledCard(deck, now.plus(Duration.ofDays(3)), now.minus(Duration.ofHours(1)));
+        Flashcard newCard = cardRepository.saveAndFlush(new Flashcard(deck, "new", "nowy", null, null, null));
+
+        var dueCards = cardRepository.findAllDue(now, PageRequest.of(0, 500));
+        var newCards = cardRepository.findAllNew(PageRequest.of(0, 500));
+
+        assertTrue(dueCards.stream().anyMatch(card -> card.getId().equals(overdue.getId())));
+        assertTrue(dueCards.stream().anyMatch(card -> card.getId().equals(dueNow.getId())));
+        assertTrue(dueCards.stream().noneMatch(card -> card.getId().equals(dueInThreeDays.getId())));
+        assertTrue(dueCards.stream().noneMatch(card -> card.getId().equals(newCard.getId())));
+        assertTrue(dueInThreeDays.isFsrsActive(), "Excluding the future card from today's queue must not deactivate FSRS");
+        assertTrue(newCards.stream().anyMatch(card -> card.getId().equals(newCard.getId())));
+        assertTrue(newCards.stream().noneMatch(card -> card.getId().equals(dueNow.getId())));
+    }
+
+    private Flashcard scheduledCard(Deck deck, Instant dueAt, Instant lastReviewAt) {
+        Flashcard card = new Flashcard(deck, "scheduled", "zaplanowana", null, null, null);
+        card.activateFsrs(lastReviewAt);
+        card.applySchedule(FsrsState.REVIEW, null, 2.0, 3.0, dueAt, lastReviewAt, false);
+        return cardRepository.saveAndFlush(card);
     }
 
     @Test
@@ -292,10 +325,8 @@ class CardControllerTest {
         assertTrue(updatedCard.body().contains("\"lapseCount\":1"));
 
         HttpResponse<String> dueQueue = request("GET", cardsPath + "?dueOnly=true", null);
-        assertTrue(dueQueue.body().contains(cardId.toString()), "A forgotten card should be immediately queued again");
+        assertTrue(!dueQueue.body().contains(cardId.toString()), "The forgotten card is not queued before its FSRS dueAt");
         assertTrue(dueQueue.body().contains(otherDueCardId.toString()));
-        assertTrue(dueQueue.body().indexOf(otherDueCardId.toString()) < dueQueue.body().indexOf(cardId.toString()),
-                "Other due cards should be shown before the forgotten card");
 
         String repeatSubmissionId = UUID.randomUUID().toString();
         HttpResponse<String> immediateRepeat = request("POST", cardsPath + "/" + cardId + "/reviews",

@@ -24,14 +24,9 @@ public interface CardRepository extends JpaRepository<Flashcard, UUID> {
 
     @Query("""
             select count(card) from Flashcard card
-            where card.fsrsActive = true and (card.lastReviewAt is null or card.dueAt <= :now or exists (
-                select review.submissionId from CardReview review
-                where review.card = card
-                  and review.reviewedAt = card.lastReviewAt
-                  and review.rating = :againRating
-            ))
+            where card.fsrsActive = true and card.dueAt <= :now
             """)
-    long countDueCards(@Param("now") Instant now, @Param("againRating") ReviewRating againRating);
+    long countDueCards(@Param("now") Instant now);
 
     @Query("select card.dueAt from Flashcard card where card.fsrsActive = true and card.dueAt >= :from and card.dueAt < :until")
     List<Instant> findDueDatesBetween(@Param("from") Instant from, @Param("until") Instant until);
@@ -46,30 +41,18 @@ public interface CardRepository extends JpaRepository<Flashcard, UUID> {
             select card from Flashcard card
             where card.deck.id = :deckId
               and card.fsrsActive = true
-              and (card.lastReviewAt is null or card.dueAt <= :now or exists (
-                  select review.submissionId from CardReview review
-                  where review.card = card
-                    and review.reviewedAt = card.lastReviewAt
-                    and review.rating = :againRating
-              ))
+              and card.dueAt <= :now
             order by card.dueAt asc, card.createdAt asc
             """)
-    List<Flashcard> findDueInDeck(@Param("deckId") UUID deckId, @Param("now") Instant now,
-                                  @Param("againRating") ReviewRating againRating, Pageable pageable);
+    List<Flashcard> findDueInDeck(@Param("deckId") UUID deckId, @Param("now") Instant now, Pageable pageable);
 
     @Query("""
             select card from Flashcard card
             where card.fsrsActive = true
-              and (card.lastReviewAt is null or card.dueAt <= :now or exists (
-                select review.submissionId from CardReview review
-                where review.card = card
-                  and review.reviewedAt = card.lastReviewAt
-                  and review.rating = :againRating
-              ))
+              and card.dueAt <= :now
             order by card.dueAt asc, card.createdAt asc
             """)
-    List<Flashcard> findAllDue(@Param("now") Instant now, @Param("againRating") ReviewRating againRating,
-                               Pageable pageable);
+    List<Flashcard> findAllDue(@Param("now") Instant now, Pageable pageable);
 
     @Query("""
             select card from Flashcard card

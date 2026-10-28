@@ -368,17 +368,15 @@ export class App implements OnInit, OnDestroy {
     }
     this.loadError = '';
     this.reviewError = '';
-    const allCardsRequest = forkJoin(decks.map((deck) => this.api.getCards(deck.id)));
     const dueCardsRequest = this.studyGlobal
       ? this.api.getDueCards()
       : this.api.getCards(decks[0].id, '', true);
-    forkJoin({ allCards: allCardsRequest, dueCards: dueCardsRequest }).subscribe({
-      next: ({ allCards, dueCards }) => {
-        const cardsById = new Map(allCards.flat().map((card) => [card.id, card]));
-        const orderedIds = [...dueCards.map((card) => card.id), ...cardsById.keys()];
-        this.studyCards = [...new Set(orderedIds)]
-          .map((cardId) => cardsById.get(cardId))
-          .filter((card): card is Flashcard => card !== undefined);
+    const newCardsRequest = this.studyGlobal
+      ? this.api.getNewCards()
+      : this.api.getNewCards(decks[0].id);
+    forkJoin({ dueCards: dueCardsRequest, newCards: newCardsRequest }).subscribe({
+      next: ({ dueCards, newCards }) => {
+        this.studyCards = [...new Map([...dueCards, ...newCards].map((card) => [card.id, card])).values()];
         this.studyMode = true;
         this.loadingCards = false;
         this.changeDetector.markForCheck();

@@ -38,14 +38,14 @@ public class ReviewService {
     public List<CardResponse> findDueCards(UUID deckId, int requestedLimit) {
         requireDeck(deckId);
         int limit = Math.max(1, Math.min(requestedLimit, 500));
-        return cardRepository.findDueInDeck(deckId, clock.instant(), ReviewRating.AGAIN, PageRequest.of(0, limit))
+        return cardRepository.findDueInDeck(deckId, clock.instant(), PageRequest.of(0, limit))
                 .stream().map(CardResponse::from).toList();
     }
 
     @Transactional(readOnly = true)
     public List<CardResponse> findAllDueCards(int requestedLimit) {
         int limit = Math.max(1, Math.min(requestedLimit, 500));
-        return cardRepository.findAllDue(clock.instant(), ReviewRating.AGAIN, PageRequest.of(0, limit))
+        return cardRepository.findAllDue(clock.instant(), PageRequest.of(0, limit))
                 .stream().map(CardResponse::from).toList();
     }
 

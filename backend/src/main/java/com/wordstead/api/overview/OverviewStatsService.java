@@ -14,7 +14,6 @@ import com.wordstead.api.cards.CardReview;
 import com.wordstead.api.cards.CardReviewRepository;
 import com.wordstead.api.cards.FsrsState;
 import com.wordstead.api.cards.ReviewDueDatePolicy;
-import com.wordstead.api.cards.ReviewRating;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,7 +73,7 @@ public class OverviewStatsService {
                 today,
                 cardRepository.count(),
                 cardRepository.countByFsrsActiveFalse(),
-                cardRepository.countDueCards(now, ReviewRating.AGAIN),
+                cardRepository.countDueCards(now),
                 cardRepository.countByFsrsActiveTrueAndFsrsState(FsrsState.REVIEW),
                 activity,
                 upcoming);
