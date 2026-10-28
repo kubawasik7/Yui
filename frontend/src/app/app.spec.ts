@@ -369,7 +369,7 @@ describe('App', () => {
     expect(app.pendingReview).toBeNull();
   });
 
-  it('keeps new cards in the shared Study queue and activates only cards marked remembered', () => {
+  it('moves skipped new cards to the end of the shared queue and activates only remembered cards', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     const deck: Deck = {
@@ -414,8 +414,14 @@ describe('App', () => {
       createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-28T10:00:00Z'
     });
     for (const request of httpTesting.match('/api/overview-stats')) request.flush(emptyOverviewStats());
-    expect(app.currentStudyCard).toBeNull();
-    expect(app.studyCards).toHaveLength(0);
+    expect(app.currentStudyCard?.id).toBe('new-1');
+    expect(app.studyCards.map((card) => card.id)).toEqual(['new-1']);
+
+    app.studyFlipped = true;
+    app.rateStudyCard('NOT_REMEMBERED');
+    expect(app.currentStudyCard?.id).toBe('new-1');
+    expect(app.studyCards.map((card) => card.id)).toEqual(['new-1']);
+    httpTesting.expectNone((request) => request.url.includes('/reviews') || request.url.includes('/activate'));
   });
 
   it('uses Space to reveal and remember, and F to mark a revealed card not remembered', () => {

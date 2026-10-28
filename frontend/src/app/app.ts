@@ -142,7 +142,8 @@ export class App implements OnInit, OnDestroy {
     if (card.fsrsActive === false) {
       this.reviewError = '';
       if (answer === 'NOT_REMEMBERED') {
-        this.studyCards = this.studyCards.slice(1);
+        const remainingCards = this.studyCards.filter((studyCard) => studyCard.id !== card.id);
+        this.studyCards = [...remainingCards, card];
         this.studyIndex = 0;
         this.studyFlipped = false;
         this.changeDetector.markForCheck();
