@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Subscription, finalize, of, switchMap, timeout } from 'rxjs';
+import { Subscription, finalize, forkJoin, of, switchMap, timeout } from 'rxjs';
 import { PronunciationService } from './pronunciation.service';
 import {
   Deck,
@@ -36,9 +36,8 @@ export class App implements OnInit, OnDestroy {
   overviewStatsError = '';
   notice = '';
   searchQuery = '';
-  activeSection: 'overview' | 'decks' | 'study' | 'learn' | 'settings' = 'overview';
+  activeSection: 'overview' | 'decks' | 'study' | 'settings' = 'overview';
   studyMode = false;
-  studyPool: 'review' | 'new' = 'review';
   studyCards: Flashcard[] = [];
   studyIndex = 0;
   studyFlipped = false;
@@ -90,52 +89,19 @@ export class App implements OnInit, OnDestroy {
     return this.decks.some((deck) => deck.cardCount > 0);
   }
 
-  get dueReviewCount(): number {
-    return this.overviewStats?.dueToday ?? 0;
-  }
-
-  get newCardsCount(): number {
-    return this.overviewStats?.newCardsToLearn ?? 0;
-  }
-
-  get hasDueReviews(): boolean {
-    return this.dueReviewCount > 0;
-  }
-
-  get hasNewCards(): boolean {
-    return this.newCardsCount > 0;
-  }
-
   get currentStudyCard(): Flashcard | null {
     return this.studyCards[this.studyIndex] ?? null;
   }
 
   startStudy(deck: Deck, event?: Event): void {
     event?.stopPropagation();
-    this.studyPool = 'review';
     this.studyGlobal = false;
     this.selectedDeck = deck;
     this.activeSection = 'study';
     this.studyDeckName = deck.name;
     this.searchQuery = '';
-    this.loadingCards = true;
     this.loadError = '';
-    this.api.getCards(deck.id, '', true).subscribe({
-      next: (cards) => {
-        this.studyCards = cards;
-        this.studyIndex = 0;
-        this.studyFlipped = false;
-        this.studyMode = true;
-        this.loadingCards = false;
-        this.changeDetector.markForCheck();
-      },
-      error: (error: unknown) => {
-        this.loadError = this.errorMessage(error, 'Cards could not be loaded.');
-        this.loadingCards = false;
-        this.activeSection = 'decks';
-        this.changeDetector.markForCheck();
-      }
-    });
+    this.loadStudyCards();
   }
 
   endStudy(reloadDeck = true): void {
@@ -173,7 +139,7 @@ export class App implements OnInit, OnDestroy {
     const card = this.currentStudyCard;
     if (!card || !this.studyFlipped || this.reviewSaving) return;
 
-    if (this.studyPool === 'new') {
+    if (card.fsrsActive === false) {
       this.reviewError = '';
       if (answer === 'NOT_REMEMBERED') {
         this.studyCards = this.studyCards.slice(1);
@@ -217,8 +183,10 @@ export class App implements OnInit, OnDestroy {
       next: () => {
         this.pendingReview = null;
         this.reviewSaving = false;
+        this.studyCards = this.studyCards.filter((studyCard) => studyCard.id !== card.id);
+        this.studyIndex = 0;
+        this.studyFlipped = false;
         this.loadOverviewStats();
-        this.loadDueStudyCards();
         this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
@@ -230,33 +198,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   retryStudyReview(): void {
-    if (this.studyPool === 'new' && this.currentStudyCard) this.rateStudyCard('REMEMBERED');
-    else if (this.pendingReview) this.rateStudyCard(this.pendingReview.answer);
-  }
-
-  private loadDueStudyCards(): void {
-    if (!this.studyGlobal && !this.selectedDeck) return;
-    this.studyCards = [];
-    this.studyIndex = 0;
-    this.studyFlipped = false;
-    this.loadingCards = true;
-    const dueCardsRequest = this.studyGlobal
-      ? this.api.getDueCards()
-      : this.api.getCards(this.selectedDeck!.id, '', true);
-    dueCardsRequest.subscribe({
-      next: (cards) => {
-        this.studyCards = cards;
-        this.studyIndex = 0;
-        this.studyFlipped = false;
-        this.loadingCards = false;
-        this.changeDetector.markForCheck();
-      },
-      error: (error: unknown) => {
-        this.reviewError = this.errorMessage(error, 'The next due cards could not be loaded.');
-        this.loadingCards = false;
-        this.changeDetector.markForCheck();
-      }
-    });
+    if (this.pendingReview) this.rateStudyCard(this.pendingReview.answer);
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -394,11 +336,11 @@ export class App implements OnInit, OnDestroy {
     this.changeDetector.markForCheck();
   }
 
-  startFirstStudy(): void {
+  startStudyAllCards(): void {
+    this.endStudy(false);
     this.studyGlobal = true;
-    this.studyPool = 'review';
     this.activeSection = 'study';
-    this.studyDeckName = 'All decks';
+    this.studyDeckName = 'All flashcards';
     this.searchQuery = '';
     this.studyCards = [];
     this.studyIndex = 0;
@@ -406,30 +348,10 @@ export class App implements OnInit, OnDestroy {
     this.loadingCards = true;
     this.loadError = '';
     this.reviewError = '';
-    this.api.getDueCards().subscribe({
-      next: (cards) => {
-        this.studyCards = cards;
-        this.studyMode = true;
-        this.loadingCards = false;
-        this.changeDetector.markForCheck();
-      },
-      error: (error: unknown) => {
-        this.loadError = this.errorMessage(error, 'Cards could not be loaded.');
-        this.loadingCards = false;
-        this.activeSection = 'decks';
-        this.studyGlobal = false;
-        this.changeDetector.markForCheck();
-      }
-    });
+    this.loadStudyCards();
   }
 
-  startNewStudy(): void {
-    this.endStudy(false);
-    this.studyPool = 'new';
-    this.studyGlobal = true;
-    this.activeSection = 'learn';
-    this.studyDeckName = 'Do nauczenia';
-    this.searchQuery = '';
+  private loadStudyCards(): void {
     this.studyCards = [];
     this.studyIndex = 0;
     this.studyFlipped = false;
@@ -437,17 +359,32 @@ export class App implements OnInit, OnDestroy {
     this.pendingReview = null;
     this.reviewSaving = false;
     this.loadingCards = true;
+    const decks = this.studyGlobal ? this.decks : this.selectedDeck ? [this.selectedDeck] : [];
+    if (decks.length === 0) {
+      this.studyMode = true;
+      this.loadingCards = false;
+      this.changeDetector.markForCheck();
+      return;
+    }
     this.loadError = '';
     this.reviewError = '';
-    this.api.getNewCards().subscribe({
-      next: (cards) => {
-        this.studyCards = cards;
+    const allCardsRequest = forkJoin(decks.map((deck) => this.api.getCards(deck.id)));
+    const dueCardsRequest = this.studyGlobal
+      ? this.api.getDueCards()
+      : this.api.getCards(decks[0].id, '', true);
+    forkJoin({ allCards: allCardsRequest, dueCards: dueCardsRequest }).subscribe({
+      next: ({ allCards, dueCards }) => {
+        const cardsById = new Map(allCards.flat().map((card) => [card.id, card]));
+        const orderedIds = [...dueCards.map((card) => card.id), ...cardsById.keys()];
+        this.studyCards = [...new Set(orderedIds)]
+          .map((cardId) => cardsById.get(cardId))
+          .filter((card): card is Flashcard => card !== undefined);
         this.studyMode = true;
         this.loadingCards = false;
         this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
-        this.loadError = this.errorMessage(error, 'New cards could not be loaded.');
+        this.loadError = this.errorMessage(error, 'Cards could not be loaded.');
         this.loadingCards = false;
         this.activeSection = 'decks';
         this.studyGlobal = false;
