@@ -14,6 +14,8 @@ import {
   ReviewAnswer
 } from './flashcard-api.service';
 
+type TimedNotificationKey = 'notice' | 'cardSavedMessage' | 'backgroundSuggestionMessage' | 'backgroundSuggestionError';
+
 @Component({
   selector: 'app-root',
   imports: [CommonModule, FormsModule],
@@ -43,6 +45,7 @@ export class App implements OnInit, OnDestroy {
   studyFlipped = false;
   studyDeckName = '';
   studyGlobal = false;
+  private studyWaitingForDecks = false;
   reviewSaving = false;
   reviewError = '';
   pendingReview: { cardId: string; submissionId: string; answer: ReviewAnswer } | null = null;
@@ -66,6 +69,9 @@ export class App implements OnInit, OnDestroy {
   backgroundSuggestionMessage = '';
   backgroundSuggestionError = '';
   private suggestionTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly notificationTimers = new Map<TimedNotificationKey, { id: number; timer: ReturnType<typeof setTimeout> }>();
+  private notificationSequence = 0;
+  private overviewStatsRequestId = 0;
   private suggestionRequest: Subscription | null = null;
   private readonly backgroundSuggestionRequests = new Map<string, Subscription>();
   private lastAppliedSuggestion: Partial<FlashcardSuggestion> | null = null;
@@ -77,6 +83,9 @@ export class App implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.cancelPendingSuggestion();
+    for (const notification of this.notificationTimers.values()) clearTimeout(notification.timer);
+    this.notificationTimers.clear();
+    this.overviewStatsRequestId++;
     for (const request of this.backgroundSuggestionRequests.values()) request.unsubscribe();
     this.backgroundSuggestionRequests.clear();
   }
@@ -89,6 +98,36 @@ export class App implements OnInit, OnDestroy {
     return this.decks.some((deck) => deck.cardCount > 0);
   }
 
+  get dueReviewCount(): number {
+    return this.overviewStats?.dueToday ?? 0;
+  }
+
+  showNotification(key: TimedNotificationKey, message: string): void {
+    this.dismissNotificationTimer(key);
+    this[key] = message;
+    const id = ++this.notificationSequence;
+    const timer = setTimeout(() => {
+      if (this.notificationTimers.get(key)?.id !== id) return;
+      this.notificationTimers.delete(key);
+      this[key] = '';
+      this.changeDetector.markForCheck();
+    }, 3500);
+    this.notificationTimers.set(key, { id, timer });
+    this.changeDetector.markForCheck();
+  }
+
+  dismissNotification(key: TimedNotificationKey): void {
+    this.dismissNotificationTimer(key);
+    this[key] = '';
+    this.changeDetector.markForCheck();
+  }
+
+  private dismissNotificationTimer(key: TimedNotificationKey): void {
+    const notification = this.notificationTimers.get(key);
+    if (notification) clearTimeout(notification.timer);
+    this.notificationTimers.delete(key);
+  }
+
   get currentStudyCard(): Flashcard | null {
     return this.studyCards[this.studyIndex] ?? null;
   }
@@ -98,6 +137,7 @@ export class App implements OnInit, OnDestroy {
     this.studyGlobal = false;
     this.selectedDeck = deck;
     this.activeSection = 'study';
+    this.studyMode = true;
     this.studyDeckName = deck.name;
     this.searchQuery = '';
     this.loadError = '';
@@ -107,6 +147,7 @@ export class App implements OnInit, OnDestroy {
   endStudy(reloadDeck = true): void {
     this.studyMode = false;
     this.studyGlobal = false;
+    this.studyWaitingForDecks = false;
     this.activeSection = 'decks';
     this.studyCards = [];
     this.studyIndex = 0;
@@ -235,26 +276,37 @@ export class App implements OnInit, OnDestroy {
           this.selectedDeck = decks.find((deck) => deck.id === this.selectedDeck?.id) ?? null;
         }
         this.loadingDecks = false;
+        if (this.studyWaitingForDecks && this.activeSection === 'study' && this.studyGlobal) {
+          this.studyWaitingForDecks = false;
+          this.loadStudyCards();
+        }
         this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
         this.loadError = this.errorMessage(error, 'Your decks could not be loaded.');
         this.loadingDecks = false;
+        if (this.studyWaitingForDecks) {
+          this.studyMode = true;
+          this.loadingCards = true;
+        }
         this.changeDetector.markForCheck();
       }
     });
   }
 
   loadOverviewStats(): void {
+    const requestId = ++this.overviewStatsRequestId;
     this.overviewStatsLoading = true;
     this.overviewStatsError = '';
     this.api.getOverviewStats().subscribe({
       next: (stats) => {
+        if (requestId !== this.overviewStatsRequestId) return;
         this.overviewStats = stats;
         this.overviewStatsLoading = false;
         this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
+        if (requestId !== this.overviewStatsRequestId) return;
         this.overviewStatsError = this.errorMessage(error, 'Your study activity could not be loaded.');
         this.overviewStatsLoading = false;
         this.changeDetector.markForCheck();
@@ -341,6 +393,7 @@ export class App implements OnInit, OnDestroy {
     this.endStudy(false);
     this.studyGlobal = true;
     this.activeSection = 'study';
+    this.studyMode = true;
     this.studyDeckName = 'All flashcards';
     this.searchQuery = '';
     this.studyCards = [];
@@ -349,14 +402,20 @@ export class App implements OnInit, OnDestroy {
     this.loadingCards = true;
     this.loadError = '';
     this.reviewError = '';
+    if (this.loadingDecks) {
+      this.studyMode = true;
+      this.loadingCards = true;
+      this.studyWaitingForDecks = true;
+      return;
+    }
     this.loadStudyCards();
   }
 
   private loadStudyCards(): void {
+    this.studyWaitingForDecks = false;
     this.studyCards = [];
     this.studyIndex = 0;
     this.studyFlipped = false;
-    this.studyMode = false;
     this.pendingReview = null;
     this.reviewSaving = false;
     this.loadingCards = true;
@@ -416,7 +475,7 @@ export class App implements OnInit, OnDestroy {
     this.deckDescription = '';
     this.desiredRetention = 0.9;
     this.deckFormOpen = true;
-    this.notice = '';
+    this.dismissNotification('notice');
     this.loadError = '';
   }
 
@@ -427,7 +486,7 @@ export class App implements OnInit, OnDestroy {
     this.deckDescription = deck.description ?? '';
     this.desiredRetention = deck.desiredRetention ?? 0.9;
     this.deckFormOpen = true;
-    this.notice = '';
+    this.dismissNotification('notice');
     this.loadError = '';
   }
 
@@ -444,7 +503,7 @@ export class App implements OnInit, OnDestroy {
       next: (deck) => {
         this.deckFormOpen = false;
         this.saving = false;
-        this.notice = this.editingDeckId ? 'Deck updated.' : 'Deck created.';
+        this.showNotification('notice', this.editingDeckId ? 'Deck updated.' : 'Deck created.');
         if (this.selectedDeck?.id === deck.id) this.selectedDeck = deck;
         this.loadDecks();
         this.changeDetector.markForCheck();
@@ -463,7 +522,7 @@ export class App implements OnInit, OnDestroy {
     this.api.deleteDeck(deck.id).subscribe({
       next: () => {
         if (this.selectedDeck?.id === deck.id) this.showOverview();
-        this.notice = 'Deck deleted.';
+        this.showNotification('notice', 'Deck deleted.');
         this.loadDecks();
         this.loadOverviewStats();
         this.changeDetector.markForCheck();
@@ -480,10 +539,10 @@ export class App implements OnInit, OnDestroy {
     this.lastAppliedSuggestion = null;
     this.editingCardId = null;
     this.cardForm = this.emptyCard();
-    this.cardSavedMessage = '';
+    this.dismissNotification('cardSavedMessage');
     this.cardFormOpen = true;
     this.suggestionError = '';
-    this.notice = '';
+    this.dismissNotification('notice');
     this.loadError = '';
   }
 
@@ -498,15 +557,15 @@ export class App implements OnInit, OnDestroy {
       mnemonic: card.mnemonic ?? '',
       notes: card.notes ?? ''
     };
-    this.cardSavedMessage = '';
+    this.dismissNotification('cardSavedMessage');
     this.cardFormOpen = true;
     this.suggestionError = '';
-    this.notice = '';
+    this.dismissNotification('notice');
     this.loadError = '';
   }
 
   onCardFrontChange(value: string): void {
-    this.cardSavedMessage = '';
+    this.dismissNotification('cardSavedMessage');
     this.clearPreviousSuggestion();
     if (this.suggestionTimer) clearTimeout(this.suggestionTimer);
     this.suggestionTimer = null;
@@ -604,9 +663,10 @@ export class App implements OnInit, OnDestroy {
         this.editingCardId = null;
         this.lastAppliedSuggestion = null;
         this.suggestionError = '';
-        this.cardSavedMessage = wasCreating ? 'Card added. Add your next word.' : '';
+        if (wasCreating) this.showNotification('cardSavedMessage', 'Card added. Add your next word.');
+        else this.dismissNotification('cardSavedMessage');
         this.loadError = '';
-        this.notice = '';
+        this.dismissNotification('notice');
         if (wasCreating) this.searchQuery = '';
         this.loadCards();
         this.loadDecks();
@@ -628,8 +688,8 @@ export class App implements OnInit, OnDestroy {
     if (savedCard.back.trim() && savedCard.example?.trim() && savedCard.mnemonic?.trim()) return;
 
     this.backgroundSuggestionCardIds.add(savedCard.id);
-    this.backgroundSuggestionMessage = '';
-    this.backgroundSuggestionError = '';
+    this.dismissNotification('backgroundSuggestionMessage');
+    this.dismissNotification('backgroundSuggestionError');
     this.changeDetector.markForCheck();
 
     const request = this.api.suggestFlashcard(word).pipe(
@@ -662,13 +722,13 @@ export class App implements OnInit, OnDestroy {
         const cardIndex = this.cards.findIndex((card) => card.id === updatedCard.id);
         if (cardIndex >= 0) this.cards[cardIndex] = updatedCard;
         if (this.backgroundSuggestionCardIds.size === 1) {
-          this.backgroundSuggestionMessage = `AI finished the translation and study hints for “${word}”.`;
+          this.showNotification('backgroundSuggestionMessage', `AI finished the translation and study hints for “${word}”.`);
         }
         this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
         if (!(error instanceof HttpErrorResponse && error.status === 404)) {
-          this.backgroundSuggestionError = `“${word}” was saved, but AI could not add its details. You can edit the card to fill them in.`;
+          this.showNotification('backgroundSuggestionError', `“${word}” was saved, but AI could not add its details. You can edit the card to fill them in.`);
         }
         this.changeDetector.markForCheck();
       }
@@ -696,7 +756,7 @@ export class App implements OnInit, OnDestroy {
       next: () => {
         this.cardToDelete = null;
         this.deletingCard = false;
-        this.notice = 'Card deleted.';
+        this.showNotification('notice', 'Card deleted.');
         this.loadCards();
         this.loadDecks();
         this.loadOverviewStats();
@@ -714,7 +774,7 @@ export class App implements OnInit, OnDestroy {
     this.cancelPendingSuggestion();
     this.deckFormOpen = false;
     this.cardFormOpen = false;
-    this.cardSavedMessage = '';
+    this.dismissNotification('cardSavedMessage');
     this.suggestionError = '';
   }
 

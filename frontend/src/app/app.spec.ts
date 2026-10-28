@@ -82,6 +82,10 @@ describe('App', () => {
     expect(compiled.querySelector('.overview-stat-grid')?.textContent).not.toContain('DO NAUCZENIA');
     expect(compiled.querySelector('.overview-stat-grid')?.textContent).toContain('7');
     expect(compiled.querySelector('.overview-stat-grid')?.textContent).toContain('42');
+    const studyTab = [...compiled.querySelectorAll<HTMLButtonElement>('button.nav-item')]
+      .find((button) => button.textContent?.includes('Study'));
+    expect(studyTab?.querySelector('.nav-count')?.textContent?.trim()).toBe('7');
+    expect(studyTab?.textContent).not.toContain('61');
     expect(compiled.querySelector('.activity-chart')?.getAttribute('aria-label')).toContain('Mon: 5 reviews');
     expect(compiled.querySelector('.forecast-list')?.textContent).toContain('Tomorrow');
     expect(compiled.querySelector('.forecast-list')?.textContent).toContain('18');
@@ -89,6 +93,60 @@ describe('App', () => {
     expect(compiled.querySelector('.forecast-list')?.textContent).toContain('31');
     expect(compiled.querySelector('.forecast-list')?.textContent).toContain('In 3 days');
     expect(compiled.querySelector('.forecast-list')?.textContent).toContain('12');
+  });
+
+  it('waits for deck loading before building the global Study queue', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const app = fixture.componentInstance;
+    app.startStudyAllCards();
+
+    expect(app.studyMode).toBe(true);
+    expect(app.loadingCards).toBe(true);
+    expect(app.studyCards).toHaveLength(0);
+
+    const deck: Deck = {
+      id: 'deck-1', name: 'New words', description: null, cardCount: 1, desiredRetention: 0.9,
+      createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
+    };
+    httpTesting.expectOne('/api/decks').flush([deck]);
+    httpTesting.expectOne('/api/cards/due').flush([]);
+    httpTesting.expectOne('/api/cards/new').flush([{
+      id: 'new-1', deckId: deck.id, front: 'apple', back: 'jabłko', example: null,
+      mnemonic: null, notes: null, fsrsActive: false, state: 'LEARNING', stability: null, difficulty: null,
+      dueAt: '2026-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
+      createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
+    }]);
+
+    expect(app.currentStudyCard?.id).toBe('new-1');
+    expect(app.loadingCards).toBe(false);
+  });
+
+  it('auto-dismisses notifications, allows manual dismissal, and protects newer messages from older timers', () => {
+    vi.useFakeTimers();
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    httpTesting.expectOne('/api/decks').flush([]);
+    const app = fixture.componentInstance;
+
+    app.showNotification('notice', 'Older message');
+    vi.advanceTimersByTime(2000);
+    app.showNotification('notice', 'Newer message');
+    vi.advanceTimersByTime(1500);
+    expect(app.notice).toBe('Newer message');
+
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.notice button') as HTMLButtonElement).click();
+    expect(app.notice).toBe('');
+    vi.advanceTimersByTime(2500);
+    expect(app.notice).toBe('');
+
+    app.showNotification('notice', 'Temporary message');
+    vi.advanceTimersByTime(3499);
+    expect(app.notice).toBe('Temporary message');
+    vi.advanceTimersByTime(1);
+    expect(app.notice).toBe('');
+    fixture.destroy();
   });
 
   it('creates a deck and card through the API', () => {
@@ -306,6 +364,10 @@ describe('App', () => {
     for (const request of httpTesting.match('/api/overview-stats')) request.flush(emptyOverviewStats());
     expect(app.studyCards).toHaveLength(1);
     expect(app.currentStudyCard?.id).toBe('new-card');
+    fixture.detectChanges();
+    const studyTab = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button.nav-item')]
+      .find((button) => button.textContent?.includes('Study'));
+    expect(studyTab?.querySelector('.nav-count')?.textContent?.trim()).toBe('0');
   });
 
   it('shows two accessible answers and submits their binary mappings to the backend', () => {

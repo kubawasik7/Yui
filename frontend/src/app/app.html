@@ -16,7 +16,7 @@
       </button>
       <button class="nav-item" [class.active]="activeSection === 'study'" [attr.aria-current]="activeSection === 'study' ? 'page' : null" type="button" (click)="startStudyAllCards()">
         <span class="nav-icon" aria-hidden="true">◷</span>Study
-        <span class="nav-count">{{ totalCards }}</span>
+        <span class="nav-count" [attr.aria-label]="dueReviewCount + ' reviews due today'">{{ dueReviewCount }}</span>
       </button>
       <button class="nav-item" [class.active]="activeSection === 'settings'" [attr.aria-current]="activeSection === 'settings' ? 'page' : null" type="button" (click)="showSettings()">
         <span class="nav-icon" aria-hidden="true">⚙</span>Settings
@@ -50,7 +50,7 @@
       @if (notice) {
         <div class="notice" role="status">
           <span>{{ notice }}</span>
-          <button type="button" aria-label="Dismiss message" (click)="notice = ''">×</button>
+          <button type="button" aria-label="Dismiss message" (click)="dismissNotification('notice')">×</button>
         </div>
       }
       @if (pronunciation.message(); as pronunciationMessage) {
@@ -67,13 +67,13 @@
       @if (backgroundSuggestionMessage && backgroundSuggestionCardIds.size === 0) {
         <div class="notice" role="status">
           <span>{{ backgroundSuggestionMessage }}</span>
-          <button type="button" aria-label="Dismiss message" (click)="backgroundSuggestionMessage = ''">×</button>
+          <button type="button" aria-label="Dismiss message" (click)="dismissNotification('backgroundSuggestionMessage')">×</button>
         </div>
       }
       @if (backgroundSuggestionError) {
         <div class="error-banner" role="alert">
           <span>{{ backgroundSuggestionError }}</span>
-          <button type="button" aria-label="Dismiss message" (click)="backgroundSuggestionError = ''">×</button>
+          <button type="button" aria-label="Dismiss message" (click)="dismissNotification('backgroundSuggestionError')">×</button>
         </div>
       }
       @if (loadError) {
@@ -367,7 +367,7 @@
       <p class="eyebrow">{{ selectedDeck?.name }}</p>
       <h2 id="card-form-title">{{ editingCardId ? 'Edit your card' : 'Add a card' }}</h2>
       <p class="modal-intro">Capture the word and the context that makes it memorable.</p>
-      @if (cardSavedMessage) { <p class="card-save-status" role="status">{{ cardSavedMessage }}</p> }
+      @if (cardSavedMessage) { <p class="card-save-status" role="status"><span>{{ cardSavedMessage }}</span><button type="button" aria-label="Dismiss message" (click)="dismissNotification('cardSavedMessage')">×</button></p> }
       <form (ngSubmit)="saveCard()">
         <div class="form-columns">
           <div>
@@ -376,7 +376,7 @@
           </div>
           <div>
             <label for="card-back">Back <span>{{ editingCardId ? 'Meaning or answer' : 'Optional — AI can fill this in' }}</span></label>
-            <textarea id="card-back" name="back" [(ngModel)]="cardForm.back" maxlength="2000" rows="2" [required]="editingCardId !== null" placeholder="wsiadać"></textarea>
+            <textarea id="card-back" name="back" [(ngModel)]="cardForm.back" maxlength="2000" rows="2" [required]="editingCardId !== null" placeholder="Translation or answer"></textarea>
           </div>
         </div>
         <label for="card-example">Example <span>Optional</span></label>
