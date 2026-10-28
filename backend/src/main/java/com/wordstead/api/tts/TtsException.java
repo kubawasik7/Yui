@@ -1,16 +1,16 @@
 package com.wordstead.api.tts;
 
-import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 
 public class TtsException extends RuntimeException {
-    private final HttpStatus status;
+    private final HttpStatusCode status;
 
-    public TtsException(HttpStatus status, String message) {
+    public TtsException(HttpStatusCode status, String message) {
         super(message);
         this.status = status;
     }
 
-    public HttpStatus getStatus() {
+    public HttpStatusCode getStatus() {
         return status;
     }
 }

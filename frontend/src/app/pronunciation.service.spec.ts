@@ -109,6 +109,8 @@ describe('PronunciationService', () => {
     );
     await vi.waitFor(() => expect(service.message()).toContain('quota limit'));
     expect(service.isSpeaking()).toBe(false);
+    expect(createObjectUrl).not.toHaveBeenCalled();
+    expect(FakeAudio.instances).toHaveLength(0);
   });
 
   it('shows the precise backend authentication error when account voices cannot be loaded', async () => {

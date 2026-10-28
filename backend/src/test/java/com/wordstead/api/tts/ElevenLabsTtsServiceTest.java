@@ -2,6 +2,8 @@ package com.wordstead.api.tts;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -9,6 +11,9 @@ import org.springframework.web.client.RestClient;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -94,24 +99,130 @@ class ElevenLabsTtsServiceTest {
     }
 
     @Test
-    void translatesProviderQuotaErrorsToSafeMessages() {
+    void mapsInsufficientCreditsSeparatelyAndDoesNotRetryThem() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        ElevenLabsTtsService service = service(builder.build(), "secret-test-key", "voice-123", "eleven_flash_v2_5");
+        List<Duration> delays = new ArrayList<>();
+        ElevenLabsTtsService service = service(builder.build(), "secret-test-key", "voice-123", "eleven_flash_v2_5",
+                delays::add);
 
         server.expect(requestTo(TTS_URI))
-                .andRespond(withStatus(TOO_MANY_REQUESTS).body("private provider response"));
+                .andRespond(withStatus(HttpStatus.PAYMENT_REQUIRED)
+                        .body("{\"detail\":{\"type\":\"payment_required\",\"code\":\"insufficient_credits\",\"message\":\"Not enough credits\"}}")
+                        .contentType(MediaType.APPLICATION_JSON));
 
-        assertThatThrownBy(() -> service.synthesize(new PronunciationRequest("hello", null)))
+        TtsException error = org.assertj.core.api.Assertions.catchThrowableOfType(
+                () -> service.synthesize(new PronunciationRequest("hello", null)), TtsException.class);
+        assertThat(error)
                 .isInstanceOf(TtsException.class)
-                .hasMessageContaining("quota limit")
-                .hasMessageNotContaining("private provider response")
+                .hasMessageContaining("insufficient credits")
                 .hasMessageNotContaining("secret-test-key");
+        assertThat(error.getStatus().value()).isEqualTo(402);
+        assertThat(delays).isEmpty();
         server.verify();
         try (var files = Files.list(temporaryDirectory)) {
             assertThat(files.toList()).isEmpty();
         } catch (Exception exception) {
             throw new AssertionError(exception);
+        }
+    }
+
+    @Test
+    void retriesRateLimitUsingRetryAfterAndReturnsAudioAfterSuccess() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        List<Duration> delays = new ArrayList<>();
+        ElevenLabsTtsService service = service(builder.build(), "secret-test-key", "voice-123", "eleven_flash_v2_5",
+                delays::add);
+        byte[] mp3 = new byte[] { 73, 68, 51, 1 };
+
+        server.expect(requestTo(TTS_URI)).andRespond(withStatus(TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, "3")
+                .body("{\"detail\":{\"type\":\"rate_limit_error\",\"code\":\"rate_limit_exceeded\",\"message\":\"Slow down\"}}")
+                .contentType(MediaType.APPLICATION_JSON));
+        server.expect(requestTo(TTS_URI)).andRespond(withSuccess(mp3, MediaType.valueOf("audio/mpeg")));
+
+        assertThat(service.synthesize(new PronunciationRequest("hello", null))).containsExactly(mp3);
+        assertThat(delays).containsExactly(Duration.ofSeconds(3));
+        server.verify();
+    }
+
+    @Test
+    void concurrentLimitGetsItsOwnMessageAfterBoundedRetries() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        List<Duration> delays = new ArrayList<>();
+        ElevenLabsTtsService service = service(builder.build(), "secret-test-key", "voice-123", "eleven_flash_v2_5",
+                delays::add);
+        String body = "{\"detail\":{\"type\":\"rate_limit_error\",\"code\":\"concurrent_limit_exceeded\",\"message\":\"Too many concurrent\"}}";
+        for (int attempt = 0; attempt < 3; attempt++) {
+            server.expect(requestTo(TTS_URI)).andRespond(withStatus(TOO_MANY_REQUESTS)
+                    .body(body).contentType(MediaType.APPLICATION_JSON));
+        }
+
+        assertThatThrownBy(() -> service.synthesize(new PronunciationRequest("hello", null)))
+                .isInstanceOf(TtsException.class)
+                .hasMessageContaining("concurrency limit");
+        assertThat(delays).containsExactly(Duration.ofMillis(500), Duration.ofSeconds(1));
+        server.verify();
+    }
+
+    @Test
+    void rateLimitGetsItsOwnMessageAfterBoundedRetries() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        List<Duration> delays = new ArrayList<>();
+        ElevenLabsTtsService service = service(builder.build(), "secret-test-key", "voice-123", "eleven_flash_v2_5",
+                delays::add);
+        String body = "{\"detail\":{\"code\":\"rate_limit_exceeded\",\"message\":\"Too many requests\"}}";
+        for (int attempt = 0; attempt < 3; attempt++) {
+            server.expect(requestTo(TTS_URI)).andRespond(withStatus(TOO_MANY_REQUESTS)
+                    .body(body).contentType(MediaType.APPLICATION_JSON));
+        }
+
+        assertThatThrownBy(() -> service.synthesize(new PronunciationRequest("hello", null)))
+                .isInstanceOf(TtsException.class)
+                .hasMessageContaining("request rate limit");
+        assertThat(delays).containsExactly(Duration.ofMillis(500), Duration.ofSeconds(1));
+        server.verify();
+    }
+
+    @Test
+    void preservesOtherProviderStatusesAndIncludesSafeDetail() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        ElevenLabsTtsService service = service(builder.build(), "secret-test-key", "voice-123", "eleven_flash_v2_5");
+        server.expect(requestTo(TTS_URI)).andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("{\"detail\":{\"type\":\"internal_error\",\"code\":\"internal_error\",\"message\":\"Temporary provider issue\"}}")
+                .contentType(MediaType.APPLICATION_JSON));
+
+        TtsException error = org.assertj.core.api.Assertions.catchThrowableOfType(
+                () -> service.synthesize(new PronunciationRequest("hello", null)), TtsException.class);
+        assertThat(error.getStatus().value()).isEqualTo(500);
+        assertThat(error).hasMessageContaining("HTTP 500 (internal_error)")
+                .hasMessageContaining("Temporary provider issue")
+                .hasMessageNotContaining("secret-test-key");
+        server.verify();
+    }
+
+    @Test
+    void preservesUnauthorizedAndForbiddenStatuses() {
+        for (var statusAndMessage : List.of(
+                new Object[] { UNAUTHORIZED, "HTTP 401" },
+                new Object[] { HttpStatus.FORBIDDEN, "HTTP 403" })) {
+            HttpStatus status = (HttpStatus) statusAndMessage[0];
+            RestClient.Builder builder = RestClient.builder();
+            MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+            ElevenLabsTtsService service = service(builder.build(), "secret-test-key", "voice-123", "eleven_flash_v2_5");
+            server.expect(requestTo(TTS_URI)).andRespond(withStatus(status)
+                    .body("{\"detail\":{\"code\":\"authorization_error\",\"message\":\"Denied\"}}")
+                    .contentType(MediaType.APPLICATION_JSON));
+
+            TtsException error = org.assertj.core.api.Assertions.catchThrowableOfType(
+                    () -> service.synthesize(new PronunciationRequest("hello", null)), TtsException.class);
+            assertThat(error.getStatus().value()).isEqualTo(status.value());
+            assertThat(error).hasMessageContaining((String) statusAndMessage[1]);
+            server.verify();
         }
     }
 
@@ -159,5 +270,10 @@ class ElevenLabsTtsServiceTest {
 
     private ElevenLabsTtsService service(RestClient restClient, String key, String voice, String model) {
         return new ElevenLabsTtsService(restClient, key, voice, model, temporaryDirectory);
+    }
+
+    private ElevenLabsTtsService service(RestClient restClient, String key, String voice, String model,
+            ElevenLabsTtsService.BackoffWaiter backoffWaiter) {
+        return new ElevenLabsTtsService(restClient, key, voice, model, temporaryDirectory, backoffWaiter);
     }
 }
