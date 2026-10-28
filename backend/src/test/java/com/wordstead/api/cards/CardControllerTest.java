@@ -95,6 +95,8 @@ class CardControllerTest {
                 "{\"front\":\"first\",\"back\":\"pierwszy\"}").body());
         UUID secondCardId = extractId(request("POST", "/api/decks/" + secondDeckId + "/cards",
                 "{\"front\":\"second\",\"back\":\"drugi\"}").body());
+        assertEquals(200, activate(firstDeckId, firstCardId).statusCode());
+        assertEquals(200, activate(secondDeckId, secondCardId).statusCode());
         jdbcTemplate.update("UPDATE cards SET due_at = ? WHERE id = ?",
                 Timestamp.from(Instant.now().plusSeconds(3600)), secondCardId);
 
@@ -110,6 +112,66 @@ class CardControllerTest {
         assertTrue(!firstDeckDue.body().contains(secondCardId.toString()));
         assertTrue(secondDeckDue.body().contains(secondCardId.toString()));
         assertTrue(!secondDeckDue.body().contains(firstCardId.toString()));
+    }
+
+    @Test
+    void newCardsStayOutsideFsrsUntilActivatedAndActivationNeverResetsSchedule() throws Exception {
+        UUID deckId = deckRepository.save(new Deck("New words", null)).getId();
+        String cardsPath = "/api/decks/" + deckId + "/cards";
+        UUID cardId = extractId(request("POST", cardsPath,
+                "{\"front\":\"apple\",\"back\":\"jabłko\"}").body());
+
+        Flashcard created = cardRepository.findById(cardId).orElseThrow();
+        assertTrue(!created.isFsrsActive());
+        assertTrue(request("GET", "/api/cards/new", null).body().contains(cardId.toString()));
+        assertTrue(request("GET", cardsPath + "/new", null).body().contains(cardId.toString()));
+        assertTrue(!request("GET", "/api/cards/due", null).body().contains(cardId.toString()));
+        assertEquals(409, request("POST", cardsPath + "/" + cardId + "/reviews",
+                "{\"submissionId\":\"" + UUID.randomUUID() + "\",\"answer\":\"REMEMBERED\"}").statusCode());
+        assertEquals(0, reviewRepository.count());
+
+        HttpResponse<String> activation = activate(deckId, cardId);
+        assertEquals(200, activation.statusCode());
+        assertTrue(activation.body().contains("\"fsrsActive\":true"));
+        assertTrue(activation.body().contains("\"state\":\"LEARNING\""));
+        assertTrue(activation.body().contains("\"stability\":null"));
+        assertTrue(activation.body().contains("\"difficulty\":null"));
+        assertTrue(activation.body().contains("\"reviewCount\":0"));
+        assertTrue(!request("GET", "/api/cards/new", null).body().contains(cardId.toString()));
+        assertTrue(request("GET", "/api/cards/due", null).body().contains(cardId.toString()));
+        assertEquals(0, reviewRepository.count(), "Activation itself is not an FSRS rating");
+
+        HttpResponse<String> duplicateActivation = activate(deckId, cardId);
+        assertEquals(extractInstant(activation.body(), "dueAt"), extractInstant(duplicateActivation.body(), "dueAt"));
+        assertTrue(duplicateActivation.body().contains("\"state\":\"LEARNING\""));
+        assertTrue(duplicateActivation.body().contains("\"reviewCount\":0"));
+        assertEquals(0, reviewRepository.count());
+
+        String reviewPath = cardsPath + "/" + cardId + "/reviews";
+        HttpResponse<String> review = request("POST", reviewPath,
+                "{\"submissionId\":\"" + UUID.randomUUID() + "\",\"answer\":\"REMEMBERED\"}");
+        assertEquals(200, review.statusCode());
+        String dueAtAfterReview = extractInstant(review.body(), "dueAt").toString();
+        HttpResponse<String> activationAfterReview = activate(deckId, cardId);
+        assertTrue(activationAfterReview.body().contains("\"state\":\"REVIEW\""));
+        assertTrue(activationAfterReview.body().contains("\"reviewCount\":1"));
+        assertEquals(dueAtAfterReview, extractInstant(activationAfterReview.body(), "dueAt").toString());
+        assertEquals(1, reviewRepository.count());
+    }
+
+    @Test
+    void migrationDefaultsExistingRowsToActiveWithoutChangingTheirDueDate() {
+        UUID deckId = deckRepository.save(new Deck("Legacy", null)).getId();
+        UUID cardId = UUID.randomUUID();
+        Instant originalDueAt = Instant.parse("2025-05-10T00:00:00Z");
+        jdbcTemplate.update("""
+                INSERT INTO cards (id, deck_id, front, back, created_at, updated_at, due_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
+                """, cardId, deckId, "legacy", "stary", Timestamp.from(originalDueAt));
+
+        Flashcard migratedLegacyCard = cardRepository.findById(cardId).orElseThrow();
+        assertTrue(migratedLegacyCard.isFsrsActive());
+        assertEquals(originalDueAt, migratedLegacyCard.getDueAt());
     }
 
     @Test
@@ -156,6 +218,7 @@ class CardControllerTest {
         HttpResponse<String> created = request("POST", cardsPath,
                 "{\"front\":\"board\",\"back\":\"wsiadać\"}");
         UUID cardId = extractId(created.body());
+        assertEquals(200, activate(deckId, cardId).statusCode());
         jdbcTemplate.update("UPDATE cards SET due_at = ? WHERE id = ?",
                 Timestamp.from(Instant.now().minusSeconds(60)), cardId);
 
@@ -203,6 +266,8 @@ class CardControllerTest {
                 "{\"front\":\"忘れる\",\"back\":\"forget\"}").body());
         UUID otherDueCardId = extractId(request("POST", cardsPath,
                 "{\"front\":\"覚える\",\"back\":\"remember\"}").body());
+        assertEquals(200, activate(deckId, cardId).statusCode());
+        assertEquals(200, activate(deckId, otherDueCardId).statusCode());
         Instant previousReview = Instant.now().minus(Duration.ofDays(1));
         Flashcard card = cardRepository.findById(cardId).orElseThrow();
         card.applySchedule(FsrsState.REVIEW, null, 2.3065, 2.1181,
@@ -245,6 +310,7 @@ class CardControllerTest {
         String cardsPath = "/api/decks/" + deckId + "/cards";
         UUID cardId = extractId(request("POST", cardsPath,
                 "{\"front\":\"木漏れ日\",\"back\":\"sunlight through leaves\"}").body());
+        assertEquals(200, activate(deckId, cardId).statusCode());
         String reviewPath = cardsPath + "/" + cardId + "/reviews";
 
         HttpResponse<String> again = request("POST", reviewPath,
@@ -278,6 +344,10 @@ class CardControllerTest {
         Matcher matcher = Pattern.compile("\\\"" + field + "\\\":\\\"([^\\\"]+)\\\"").matcher(json);
         if (!matcher.find()) throw new AssertionError("Missing timestamp field: " + field);
         return Instant.parse(matcher.group(1));
+    }
+
+    private HttpResponse<String> activate(UUID deckId, UUID cardId) throws Exception {
+        return request("POST", "/api/decks/" + deckId + "/cards/" + cardId + "/activate", "{}");
     }
 
     private HttpResponse<String> request(String method, String path, String jsonBody) throws Exception {

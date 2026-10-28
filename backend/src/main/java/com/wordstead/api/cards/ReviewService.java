@@ -49,6 +49,31 @@ public class ReviewService {
                 .stream().map(CardResponse::from).toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<CardResponse> findNewCards(UUID deckId, int requestedLimit) {
+        requireDeck(deckId);
+        int limit = Math.max(1, Math.min(requestedLimit, 500));
+        return cardRepository.findNewInDeck(deckId, PageRequest.of(0, limit))
+                .stream().map(CardResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<CardResponse> findAllNewCards(int requestedLimit) {
+        int limit = Math.max(1, Math.min(requestedLimit, 500));
+        return cardRepository.findAllNew(PageRequest.of(0, limit))
+                .stream().map(CardResponse::from).toList();
+    }
+
+    @Transactional
+    public CardResponse activate(UUID deckId, UUID cardId) {
+        Flashcard card = cardRepository.findByIdAndDeckIdForUpdate(cardId, deckId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Card not found"));
+        if (card.activateFsrs(clock.instant().truncatedTo(ChronoUnit.MICROS))) {
+            cardRepository.save(card);
+        }
+        return CardResponse.from(card);
+    }
+
     @Transactional
     public ReviewResponse review(UUID deckId, UUID cardId, ReviewRequest request) {
         ReviewRating rating = request.answer().toFsrsRating();
@@ -61,6 +86,11 @@ public class ReviewService {
         // Re-check under the card lock so a retry waiting on a concurrent request observes its commit.
         alreadyRecorded = reviewRepository.findBySubmissionId(request.submissionId()).orElse(null);
         if (alreadyRecorded != null) return idempotentResponse(alreadyRecorded, cardId, rating);
+
+        if (!card.isFsrsActive()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Card must be marked as remembered before it can enter FSRS review");
+        }
 
         // PostgreSQL stores TIMESTAMP WITH TIME ZONE at microsecond precision; normalize before
         // building either response so a retry returns the same serialized review record.

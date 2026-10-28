@@ -38,6 +38,13 @@ public class CardController {
         return cardService.findAll(deckId, query);
     }
 
+    @GetMapping("/new")
+    public List<CardResponse> findNewCards(
+            @PathVariable UUID deckId,
+            @RequestParam(defaultValue = "500") int limit) {
+        return reviewService.findNewCards(deckId, limit);
+    }
+
     @GetMapping("/{cardId}")
     public CardResponse findById(@PathVariable UUID deckId, @PathVariable UUID cardId) {
         return cardService.findById(deckId, cardId);
@@ -63,5 +70,10 @@ public class CardController {
     public ResponseEntity<Void> delete(@PathVariable UUID deckId, @PathVariable UUID cardId) {
         cardService.delete(deckId, cardId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{cardId}/activate")
+    public CardResponse activate(@PathVariable UUID deckId, @PathVariable UUID cardId) {
+        return reviewService.activate(deckId, cardId);
     }
 }

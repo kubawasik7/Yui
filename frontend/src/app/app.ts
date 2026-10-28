@@ -36,8 +36,9 @@ export class App implements OnInit, OnDestroy {
   overviewStatsError = '';
   notice = '';
   searchQuery = '';
-  activeSection: 'overview' | 'decks' | 'study' | 'settings' = 'overview';
+  activeSection: 'overview' | 'decks' | 'study' | 'learn' | 'settings' = 'overview';
   studyMode = false;
+  studyPool: 'review' | 'new' = 'review';
   studyCards: Flashcard[] = [];
   studyIndex = 0;
   studyFlipped = false;
@@ -89,12 +90,29 @@ export class App implements OnInit, OnDestroy {
     return this.decks.some((deck) => deck.cardCount > 0);
   }
 
+  get dueReviewCount(): number {
+    return this.overviewStats?.dueToday ?? 0;
+  }
+
+  get newCardsCount(): number {
+    return this.overviewStats?.newCardsToLearn ?? 0;
+  }
+
+  get hasDueReviews(): boolean {
+    return this.dueReviewCount > 0;
+  }
+
+  get hasNewCards(): boolean {
+    return this.newCardsCount > 0;
+  }
+
   get currentStudyCard(): Flashcard | null {
     return this.studyCards[this.studyIndex] ?? null;
   }
 
   startStudy(deck: Deck, event?: Event): void {
     event?.stopPropagation();
+    this.studyPool = 'review';
     this.studyGlobal = false;
     this.selectedDeck = deck;
     this.activeSection = 'study';
@@ -154,6 +172,36 @@ export class App implements OnInit, OnDestroy {
   rateStudyCard(answer: ReviewAnswer): void {
     const card = this.currentStudyCard;
     if (!card || !this.studyFlipped || this.reviewSaving) return;
+
+    if (this.studyPool === 'new') {
+      this.reviewError = '';
+      if (answer === 'NOT_REMEMBERED') {
+        this.studyCards = this.studyCards.slice(1);
+        this.studyIndex = 0;
+        this.studyFlipped = false;
+        this.changeDetector.markForCheck();
+        return;
+      }
+
+      this.reviewSaving = true;
+      this.api.activateCard(card.deckId, card.id).subscribe({
+        next: () => {
+          this.studyCards = this.studyCards.filter((studyCard) => studyCard.id !== card.id);
+          this.studyIndex = 0;
+          this.studyFlipped = false;
+          this.reviewSaving = false;
+          this.loadOverviewStats();
+          this.changeDetector.markForCheck();
+        },
+        error: (error: unknown) => {
+          this.reviewSaving = false;
+          this.reviewError = this.errorMessage(error, 'The card could not be activated for FSRS review. Retry to continue.');
+          this.changeDetector.markForCheck();
+        }
+      });
+      return;
+    }
+
     if (!this.pendingReview) {
       this.pendingReview = { cardId: card.id, submissionId: crypto.randomUUID(), answer };
     }
@@ -182,7 +230,8 @@ export class App implements OnInit, OnDestroy {
   }
 
   retryStudyReview(): void {
-    if (this.pendingReview) this.rateStudyCard(this.pendingReview.answer);
+    if (this.studyPool === 'new' && this.currentStudyCard) this.rateStudyCard('REMEMBERED');
+    else if (this.pendingReview) this.rateStudyCard(this.pendingReview.answer);
   }
 
   private loadDueStudyCards(): void {
@@ -347,6 +396,7 @@ export class App implements OnInit, OnDestroy {
 
   startFirstStudy(): void {
     this.studyGlobal = true;
+    this.studyPool = 'review';
     this.activeSection = 'study';
     this.studyDeckName = 'All decks';
     this.searchQuery = '';
@@ -365,6 +415,39 @@ export class App implements OnInit, OnDestroy {
       },
       error: (error: unknown) => {
         this.loadError = this.errorMessage(error, 'Cards could not be loaded.');
+        this.loadingCards = false;
+        this.activeSection = 'decks';
+        this.studyGlobal = false;
+        this.changeDetector.markForCheck();
+      }
+    });
+  }
+
+  startNewStudy(): void {
+    this.endStudy(false);
+    this.studyPool = 'new';
+    this.studyGlobal = true;
+    this.activeSection = 'learn';
+    this.studyDeckName = 'Do nauczenia';
+    this.searchQuery = '';
+    this.studyCards = [];
+    this.studyIndex = 0;
+    this.studyFlipped = false;
+    this.studyMode = false;
+    this.pendingReview = null;
+    this.reviewSaving = false;
+    this.loadingCards = true;
+    this.loadError = '';
+    this.reviewError = '';
+    this.api.getNewCards().subscribe({
+      next: (cards) => {
+        this.studyCards = cards;
+        this.studyMode = true;
+        this.loadingCards = false;
+        this.changeDetector.markForCheck();
+      },
+      error: (error: unknown) => {
+        this.loadError = this.errorMessage(error, 'New cards could not be loaded.');
         this.loadingCards = false;
         this.activeSection = 'decks';
         this.studyGlobal = false;

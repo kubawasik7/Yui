@@ -14,9 +14,13 @@
         <span class="nav-icon" aria-hidden="true">▤</span>My decks
         <span class="nav-count">{{ decks.length }}</span>
       </button>
-      <button class="nav-item" [class.active]="activeSection === 'study'" [attr.aria-current]="activeSection === 'study' ? 'page' : null" type="button" [disabled]="!hasStudyCards" (click)="startFirstStudy()">
-        <span class="nav-icon" aria-hidden="true">✳</span>Study
-        <span class="nav-count">{{ decks.length ? '↗' : '—' }}</span>
+      <button class="nav-item" [class.active]="activeSection === 'learn'" [attr.aria-current]="activeSection === 'learn' ? 'page' : null" type="button" [disabled]="!hasNewCards" (click)="startNewStudy()">
+        <span class="nav-icon" aria-hidden="true">✳</span>Do nauczenia
+        <span class="nav-count">{{ newCardsCount }}</span>
+      </button>
+      <button class="nav-item" [class.active]="activeSection === 'study'" [attr.aria-current]="activeSection === 'study' ? 'page' : null" type="button" [disabled]="!hasDueReviews" (click)="startFirstStudy()">
+        <span class="nav-icon" aria-hidden="true">◷</span>Powtórki
+        <span class="nav-count">{{ dueReviewCount }}</span>
       </button>
       <button class="nav-item" [class.active]="activeSection === 'settings'" [attr.aria-current]="activeSection === 'settings' ? 'page' : null" type="button" (click)="showSettings()">
         <span class="nav-icon" aria-hidden="true">⚙</span>Settings
@@ -41,7 +45,7 @@
       <div class="breadcrumb">
         <button type="button" (click)="showOverview()">Workspace</button>
         <span class="crumb-divider">/</span>
-        <strong>{{ selectedDeck?.name ?? (activeSection === 'settings' ? 'Settings' : activeSection === 'study' ? 'Study' : 'Overview') }}</strong>
+        <strong>{{ activeSection === 'learn' ? 'Do nauczenia' : activeSection === 'study' ? 'Powtórki' : (selectedDeck?.name ?? (activeSection === 'settings' ? 'Settings' : 'Overview')) }}</strong>
       </div>
       <span class="today-label"><span class="status-dot"></span> Your learning space</span>
     </header>
@@ -87,14 +91,14 @@
         <section class="study-heading">
           <div>
             <button class="back-link" type="button" (click)="endStudy()">← Exit study</button>
-            <p class="eyebrow">STUDY</p>
+            <p class="eyebrow">{{ studyPool === 'new' ? 'NEW CARDS' : 'FSRS REVIEW' }}</p>
             <h1 class="detail-title">{{ studyDeckName }}</h1>
-            <p class="detail-description">Review due cards and choose whether you remembered each one.</p>
+            <p class="detail-description">{{ studyPool === 'new' ? 'Explore new words. “Zapamiętane” activates FSRS; “Jeszcze nie” only skips this card for now.' : 'Review scheduled cards and choose whether you remembered each one.' }}</p>
           </div>
           <span class="study-counter">{{ studyCards.length ? studyIndex + 1 : 0 }} <span>/</span> {{ studyCards.length }}</span>
         </section>
         @if (loadingCards) {
-          <div class="loading-state" role="status">Loading cards due for review…</div>
+          <div class="loading-state" role="status">{{ studyPool === 'new' ? 'Loading new cards…' : 'Loading cards due for review…' }}</div>
         } @else if (currentStudyCard; as studyCard) {
           <section class="study-stage" aria-label="Flashcard study">
             <div class="study-flashcard" role="group" tabindex="0" [class.is-flipped]="studyFlipped" (click)="flipStudyCard()" (keydown.enter)="flipStudyCard()" [attr.aria-label]="studyFlipped ? 'Answer side of flashcard' : 'Prompt side of flashcard'">
@@ -106,15 +110,15 @@
             </div>
             <div class="study-controls">
               @if (studyFlipped) {
-                <span><kbd>Space</kbd> Remembered <span class="shortcut-divider">·</span> <kbd>F</kbd> Not remembered</span>
+                <span><kbd>Space</kbd> {{ studyPool === 'new' ? 'Zapamiętane' : 'Remembered' }} <span class="shortcut-divider">·</span> <kbd>F</kbd> {{ studyPool === 'new' ? 'Jeszcze nie' : 'Not remembered' }}</span>
               } @else {
                 <span><kbd>Space</kbd> reveal the answer</span>
               }
             </div>
             @if (studyFlipped) {
-              <div class="rating-controls" role="group" aria-label="Did you remember the answer?">
-                <button class="rating-button rating-again" type="button" [disabled]="reviewSaving || pendingReview !== null" (click)="rateStudyCard('NOT_REMEMBERED')"><strong>Not remembered</strong><small>Schedule again soon</small></button>
-                <button class="rating-button rating-good" type="button" [disabled]="reviewSaving || pendingReview !== null" (click)="rateStudyCard('REMEMBERED')"><strong>Remembered</strong><small>Continue review</small></button>
+              <div class="rating-controls" role="group" [attr.aria-label]="studyPool === 'new' ? 'Learn this new card' : 'Did you remember the answer?'">
+                <button class="rating-button rating-again" type="button" [disabled]="reviewSaving || pendingReview !== null" (click)="rateStudyCard('NOT_REMEMBERED')"><strong>{{ studyPool === 'new' ? 'Jeszcze nie' : 'Not remembered' }}</strong><small>{{ studyPool === 'new' ? 'Skip for this session only' : 'Schedule again soon' }}</small></button>
+                <button class="rating-button rating-good" type="button" [disabled]="reviewSaving || pendingReview !== null" (click)="rateStudyCard('REMEMBERED')"><strong>{{ studyPool === 'new' ? 'Zapamiętane' : 'Remembered' }}</strong><small>{{ studyPool === 'new' ? 'Activate FSRS review' : 'Continue review' }}</small></button>
               </div>
             }
             @if (reviewSaving) { <p class="study-note" role="status">Saving review…</p> }
@@ -123,7 +127,7 @@
             }
           </section>
         } @else {
-          <section class="inline-empty"><span class="inline-empty-icon" aria-hidden="true">✳</span><h3>{{ studyGlobal || selectedDeck?.cardCount ? 'You’re all caught up' : 'This deck has no cards yet' }}</h3><p>{{ studyGlobal ? 'There are no cards due across your decks right now.' : (selectedDeck?.cardCount ? 'There are no cards due in this deck right now. Come back when the next review is ready.' : 'Add your first card to start a study session.') }}</p>@if (reviewError) { <p class="form-error" role="alert">{{ reviewError }}</p> }<button class="secondary-button" type="button" (click)="endStudy()">Back to deck</button></section>
+          <section class="inline-empty"><span class="inline-empty-icon" aria-hidden="true">✳</span><h3>{{ studyPool === 'new' ? 'You’ve reached the end of this pass' : (studyGlobal || selectedDeck?.cardCount ? 'You’re all caught up' : 'This deck has no cards yet') }}</h3><p>{{ studyPool === 'new' ? 'Cards skipped with “Jeszcze nie” remain in Do nauczenia and have not been scheduled by FSRS.' : (studyGlobal ? 'There are no cards due across your decks right now.' : (selectedDeck?.cardCount ? 'There are no cards due in this deck right now. Come back when the next review is ready.' : 'Add your first card to start a study session.')) }}</p>@if (reviewError) { <p class="form-error" role="alert">{{ reviewError }}</p> }<button class="secondary-button" type="button" (click)="endStudy()">Back to deck</button></section>
         }
       } @else if (selectedDeck; as deck) {
         <section class="deck-detail-heading">
@@ -249,6 +253,7 @@
         }
         <section class="overview-stat-grid" aria-label="Flashcard overview">
           <article class="overview-stat-card"><span class="overview-stat-icon">▤</span><span class="overview-stat-label">ALL FLASHCARDS</span><strong>{{ overviewStatsLoading ? '—' : (overviewStats?.totalCards ?? 0) }}</strong><small>Across your library</small></article>
+          <article class="overview-stat-card overview-stat-new"><span class="overview-stat-icon">✳</span><span class="overview-stat-label">DO NAUCZENIA</span><strong>{{ overviewStatsLoading ? '—' : (overviewStats?.newCardsToLearn ?? 0) }}</strong><small>Not yet scheduled in FSRS</small></article>
           <article class="overview-stat-card overview-stat-due"><span class="overview-stat-icon">◷</span><span class="overview-stat-label">DUE TODAY</span><strong>{{ overviewStatsLoading ? '—' : (overviewStats?.dueToday ?? 0) }}</strong><small>Ready for review now</small></article>
           <article class="overview-stat-card overview-stat-mastered"><span class="overview-stat-icon">✓</span><span class="overview-stat-label">MASTERED</span><strong>{{ overviewStatsLoading ? '—' : (overviewStats?.masteredCards ?? 0) }}</strong><small>Graduated to FSRS review</small></article>
         </section>

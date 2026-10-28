@@ -64,7 +64,7 @@ describe('App', () => {
     fixture.detectChanges();
     httpTesting.expectOne('/api/decks').flush([]);
     httpTesting.expectOne('/api/overview-stats').flush({
-      today: '2026-10-26', totalCards: 61, dueToday: 7, masteredCards: 42,
+      today: '2026-10-26', totalCards: 61, newCardsToLearn: 12, dueToday: 7, masteredCards: 42,
       activity: [
         { date: '2026-10-20', reviews: 1 }, { date: '2026-10-21', reviews: 3 },
         { date: '2026-10-22', reviews: 0 }, { date: '2026-10-23', reviews: 4 },
@@ -79,6 +79,7 @@ describe('App', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.overview-stat-grid')?.textContent).toContain('61');
+    expect(compiled.querySelector('.overview-stat-grid')?.textContent).toContain('12');
     expect(compiled.querySelector('.overview-stat-grid')?.textContent).toContain('7');
     expect(compiled.querySelector('.overview-stat-grid')?.textContent).toContain('42');
     expect(compiled.querySelector('.activity-chart')?.getAttribute('aria-label')).toContain('Mon: 5 reviews');
@@ -275,7 +276,7 @@ describe('App', () => {
     expect(app.currentStudyCard?.deckId).toBe('deck-2');
     fixture.detectChanges();
     expect(app.studyDeckName).toBe('All decks');
-    expect(fixture.nativeElement.querySelector('.study-heading .eyebrow')?.textContent?.trim()).toBe('STUDY');
+    expect(fixture.nativeElement.querySelector('.study-heading .eyebrow')?.textContent?.trim()).toBe('FSRS REVIEW');
     expect(fixture.nativeElement.querySelector('.study-mnemonic')?.textContent).toContain('A bright image');
     const pronunciationButton = fixture.nativeElement.querySelector('.study-front .pronunciation-button') as HTMLButtonElement;
     pronunciationButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
@@ -374,6 +375,49 @@ describe('App', () => {
     expect(app.pendingReview).toBeNull();
   });
 
+  it('keeps new-card browsing local and activates only cards marked remembered', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    httpTesting.expectOne('/api/decks').flush([]);
+    const app = fixture.componentInstance;
+    app.startNewStudy();
+    httpTesting.expectOne('/api/cards/new').flush([
+      {
+        id: 'new-1', deckId: 'deck-1', front: 'apple', back: 'jabłko', example: null,
+        mnemonic: null, notes: null, fsrsActive: false, state: 'LEARNING', stability: null, difficulty: null,
+        dueAt: '2026-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
+        createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
+      },
+      {
+        id: 'new-2', deckId: 'deck-1', front: 'pear', back: 'gruszka', example: null,
+        mnemonic: null, notes: null, fsrsActive: false, state: 'LEARNING', stability: null, difficulty: null,
+        dueAt: '2026-10-23T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
+        createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
+      }
+    ]);
+
+    expect(app.studyPool).toBe('new');
+    app.studyFlipped = true;
+    app.rateStudyCard('NOT_REMEMBERED');
+    expect(app.currentStudyCard?.id).toBe('new-2');
+    expect(app.pendingReview).toBeNull();
+    httpTesting.expectNone((request) => request.url.includes('/reviews') || request.url.includes('/activate'));
+
+    app.studyFlipped = true;
+    app.rateStudyCard('REMEMBERED');
+    const activation = httpTesting.expectOne('/api/decks/deck-1/cards/new-2/activate');
+    expect(activation.request.method).toBe('POST');
+    activation.flush({
+      id: 'new-2', deckId: 'deck-1', front: 'pear', back: 'gruszka', example: null,
+      mnemonic: null, notes: null, fsrsActive: true, state: 'LEARNING', stability: null, difficulty: null,
+      dueAt: '2026-10-28T10:00:00Z', lastReviewAt: null, reviewCount: 0, lapseCount: 0,
+      createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-28T10:00:00Z'
+    });
+    for (const request of httpTesting.match('/api/overview-stats')) request.flush(emptyOverviewStats());
+    expect(app.currentStudyCard).toBeNull();
+    expect(app.studyCards).toHaveLength(0);
+  });
+
   it('uses Space to reveal and remember, and F to mark a revealed card not remembered', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
@@ -438,6 +482,6 @@ describe('App', () => {
 
 function emptyOverviewStats(): OverviewStats {
   return {
-    today: '2026-10-26', totalCards: 0, dueToday: 0, masteredCards: 0, activity: [], upcoming: []
+    today: '2026-10-26', totalCards: 0, newCardsToLearn: 0, dueToday: 0, masteredCards: 0, activity: [], upcoming: []
   };
 }

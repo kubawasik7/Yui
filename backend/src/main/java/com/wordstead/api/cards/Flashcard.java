@@ -50,6 +50,9 @@ public class Flashcard {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    @Column(name = "fsrs_active", nullable = false)
+    private boolean fsrsActive;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "fsrs_state", nullable = false, length = 20)
     private FsrsState fsrsState = FsrsState.LEARNING;
@@ -116,6 +119,18 @@ public class Flashcard {
         if (lapse) this.lapseCount++;
     }
 
+    public boolean activateFsrs(Instant activatedAt) {
+        if (fsrsActive) return false;
+        fsrsActive = true;
+        fsrsState = FsrsState.LEARNING;
+        learningStep = 0;
+        stability = null;
+        difficulty = null;
+        dueAt = activatedAt;
+        lastReviewAt = null;
+        return true;
+    }
+
     public UUID getId() { return id; }
     public Deck getDeck() { return deck; }
     public String getFront() { return front; }
@@ -126,6 +141,7 @@ public class Flashcard {
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public FsrsState getFsrsState() { return fsrsState; }
+    public boolean isFsrsActive() { return fsrsActive; }
     public Integer getLearningStep() { return learningStep; }
     public Double getStability() { return stability; }
     public Double getDifficulty() { return difficulty; }

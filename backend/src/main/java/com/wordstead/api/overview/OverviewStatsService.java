@@ -73,8 +73,9 @@ public class OverviewStatsService {
         return new OverviewStatsResponse(
                 today,
                 cardRepository.count(),
+                cardRepository.countByFsrsActiveFalse(),
                 cardRepository.countDueCards(now, ReviewRating.AGAIN),
-                cardRepository.countByFsrsState(FsrsState.REVIEW),
+                cardRepository.countByFsrsActiveTrueAndFsrsState(FsrsState.REVIEW),
                 activity,
                 upcoming);
     }

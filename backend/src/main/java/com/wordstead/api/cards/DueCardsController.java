@@ -21,4 +21,9 @@ public class DueCardsController {
     public List<CardResponse> findDueCards(@RequestParam(defaultValue = "100") int limit) {
         return reviewService.findAllDueCards(limit);
     }
+
+    @GetMapping("/new")
+    public List<CardResponse> findNewCards(@RequestParam(defaultValue = "500") int limit) {
+        return reviewService.findAllNewCards(limit);
+    }
 }

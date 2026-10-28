@@ -26,6 +26,7 @@ export interface Flashcard {
   example: string | null;
   mnemonic: string | null;
   notes: string | null;
+  fsrsActive?: boolean;
   state: 'LEARNING' | 'REVIEW' | 'RELEARNING';
   stability: number | null;
   difficulty: number | null;
@@ -79,6 +80,7 @@ export interface DailyForecast {
 export interface OverviewStats {
   today: string;
   totalCards: number;
+  newCardsToLearn: number;
   dueToday: number;
   masteredCards: number;
   activity: DailyActivity[];
@@ -123,12 +125,20 @@ export class FlashcardApiService {
     return this.http.get<Flashcard[]>(`${this.baseUrl}/cards/due`);
   }
 
+  getNewCards(): Observable<Flashcard[]> {
+    return this.http.get<Flashcard[]>(`${this.baseUrl}/cards/new`);
+  }
+
   getCard(deckId: string, cardId: string): Observable<Flashcard> {
     return this.http.get<Flashcard>(`${this.baseUrl}/decks/${deckId}/cards/${cardId}`);
   }
 
   submitReview(deckId: string, cardId: string, input: ReviewInput): Observable<ReviewResult> {
     return this.http.post<ReviewResult>(`${this.baseUrl}/decks/${deckId}/cards/${cardId}/reviews`, input);
+  }
+
+  activateCard(deckId: string, cardId: string): Observable<Flashcard> {
+    return this.http.post<Flashcard>(`${this.baseUrl}/decks/${deckId}/cards/${cardId}/activate`, {});
   }
 
   createCard(deckId: string, input: FlashcardInput): Observable<Flashcard> {
