@@ -59,7 +59,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "include": "installer-assets/installer.nsh",
+      "installerHeader": "installer-assets/installer-header.bmp",
+      "installerSidebar": "installer-assets/installer-sidebar.bmp",
+      "uninstallerSidebar": "installer-assets/installer-sidebar.bmp"
     }
   }
 }

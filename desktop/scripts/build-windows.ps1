@@ -75,6 +75,7 @@ if (-not $versionMatch.Success -or [int]$versionMatch.Groups[1].Value -lt 21) {
 
 New-Item -ItemType Directory -Force -Path $resourceRoot, $backendResourceRoot | Out-Null
 Copy-Item -LiteralPath $jar.FullName -Destination (Join-Path $backendResourceRoot 'yui-api.jar') -Force
+Invoke-CheckedCommand 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $desktopRoot 'installer-assets\generate-branding.ps1')) $desktopRoot
 
 if (Test-Path $runtimeRoot) {
     $resolvedRuntime = (Resolve-Path $runtimeRoot).Path
