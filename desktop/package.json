@@ -54,10 +54,11 @@
       ]
     },
     "nsis": {
+      "artifactName": "Yui Install Engine ${version}.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
+      "createDesktopShortcut": false,
       "createStartMenuShortcut": true,
       "deleteAppDataOnUninstall": false,
       "include": "installer-assets/installer.nsh",

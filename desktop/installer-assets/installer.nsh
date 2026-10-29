@@ -11,6 +11,15 @@ Var YuiSmallFont
 Var YuiPanel
 Var YuiLabel
 
+!macro customInstall
+  ReadEnvStr $0 "YUI_CREATE_DESKTOP_SHORTCUT"
+  ${If} $0 == "1"
+    CreateShortCut "$DESKTOP\Yui.lnk" "$INSTDIR\Yui.exe" "" "$INSTDIR\Yui.exe" 0 SW_SHOWNORMAL "" "Yui"
+  ${Else}
+    Delete "$DESKTOP\Yui.lnk"
+  ${EndIf}
+!macroend
+
 !macro customWelcomePage
   Page custom YuiWelcomePage YuiWelcomeLeave
 !macroend
@@ -142,6 +151,10 @@ FunctionEnd
 Function YuiReadyLeave
 FunctionEnd
 !endif
+
+!macro customUnInstall
+  Delete "$DESKTOP\Yui.lnk"
+!macroend
 
 !macro customUnWelcomePage
   !define MUI_UNWELCOMEPAGE_TITLE "Remove Yui"

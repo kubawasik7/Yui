@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none';">
+  <title>Yui Setup</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="window-shell">
+    <header class="titlebar" aria-label="Yui Setup window controls">
+      <div class="brand-lockup"><span class="brand-mark">結</span><span>YUI <i>SETUP</i></span></div>
+      <div class="window-controls">
+        <button class="window-control" id="minimize" aria-label="Minimize installer"><span>−</span></button>
+        <button class="window-control close" id="close" aria-label="Close installer"><span>×</span></button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="copy-panel" aria-live="polite">
+        <div class="eyebrow"><span class="eyebrow-line"></span> LANGUAGE, REMEMBERED</div>
+        <div class="view active" id="welcome-view">
+          <div class="version-chip"><span class="status-dot"></span><span id="version">YUI DESKTOP</span></div>
+          <h1>A quieter way<br>to <span>remember.</span></h1>
+          <p class="intro">A personal space for words that stay with you. Let’s get your study room ready.</p>
+
+          <div class="path-label-row"><label for="install-path">INSTALL LOCATION</label><span class="size-note" id="size-note">Checking package…</span></div>
+          <div class="path-control">
+            <span class="folder-glyph" aria-hidden="true">▱</span>
+            <input id="install-path" type="text" autocomplete="off" spellcheck="false" aria-label="Install folder">
+            <button id="browse" type="button" aria-label="Browse for install folder">BROWSE</button>
+          </div>
+          <div class="validation" id="validation" role="status"></div>
+
+          <label class="check-row" for="desktop-shortcut">
+            <input id="desktop-shortcut" type="checkbox" checked>
+            <span class="check-box" aria-hidden="true"></span>
+            <span class="check-copy"><strong>Create a desktop shortcut</strong><small>Keep Yui within easy reach.</small></span>
+          </label>
+
+          <button class="primary-button" id="install" type="button">
+            <span>Install Yui</span><span class="button-arrow" aria-hidden="true">↗</span>
+          </button>
+          <div class="footnote"><span class="lock-glyph" aria-hidden="true">◇</span> Your learning data stays on this device.</div>
+        </div>
+
+        <div class="view" id="installing-view">
+          <div class="phase-label"><span class="live-dot"></span> SETUP IN PROGRESS</div>
+          <h1>Making room<br>for <span>Yui.</span></h1>
+          <p class="intro">The installer is copying application files and setting up your shortcuts. This may take a few minutes.</p>
+          <div class="activity-card">
+            <div class="spinner" aria-hidden="true"></div>
+            <div><strong id="install-status">Preparing the Yui installation…</strong><span>Working on this device</span></div>
+          </div>
+          <div class="indeterminate-track" aria-label="Installation in progress"><span></span></div>
+          <div class="progress-caption"><span>INSTALLING YUI DESKTOP</span><span>PLEASE KEEP THIS WINDOW OPEN</span></div>
+          <div class="footnote"><span class="lock-glyph" aria-hidden="true">◇</span> Existing Yui data and settings are preserved.</div>
+        </div>
+
+        <div class="view" id="complete-view">
+          <div class="complete-icon" aria-hidden="true">✓</div>
+          <div class="phase-label">READY WHEN YOU ARE</div>
+          <h1>Welcome<br><span>to Yui.</span></h1>
+          <p class="intro" id="complete-message">Yui is installed and ready.</p>
+          <button class="primary-button" id="launch" type="button"><span>Launch Yui</span><span class="button-arrow" aria-hidden="true">↗</span></button>
+          <button class="text-button" id="finish" type="button">Close installer</button>
+        </div>
+
+        <div class="view" id="error-view">
+          <div class="error-icon" aria-hidden="true">!</div>
+          <div class="phase-label">SETUP NEEDS ATTENTION</div>
+          <h1>Not quite<br><span>ready yet.</span></h1>
+          <p class="intro" id="error-message">Yui could not be installed.</p>
+          <button class="primary-button" id="retry" type="button"><span>Try again</span><span class="button-arrow" aria-hidden="true">↻</span></button>
+          <button class="text-button" id="error-close" type="button">Close installer</button>
+        </div>
+      </section>
+
+      <aside class="art-panel" aria-label="Yui visual identity">
+        <div class="art-grain"></div>
+        <div class="art-topline"><span>結 — CONNECTION</span><span>01 / 04</span></div>
+        <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+        <div class="sakura-disc"><div class="disc-core"></div><div class="kanji-watermark">結</div></div>
+        <div class="art-orbit-label label-top">STUDY AT YOUR PACE</div>
+        <div class="art-orbit-label label-bottom">A LITTLE, OFTEN.</div>
+        <div class="art-bottomline"><span class="vertical-rule"></span><span>WORDS CONNECT<br>IDEAS &amp; PEOPLE</span></div>
+        <div class="art-index">YUI<br><b>ユイ</b></div>
+      </aside>
+    </main>
+    <footer class="statusbar"><span><i class="footer-dot"></i> YUI DESKTOP INSTALLER</span><span>MADE FOR YOUR DAILY RHYTHM</span></footer>
+  </div>
+  <script src="renderer.js"></script>
+</body>
+</html>

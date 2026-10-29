@@ -79,7 +79,7 @@ The `voiceId` may be omitted or set to `null` to use the backend default. In Yui
 
 ### Windows desktop app
 
-Yui can be run in an Electron window or packaged as a Windows NSIS installer. Electron serves the production Angular files from a loopback-only local server and proxies `/api` to a Spring Boot process bound to `127.0.0.1`. The renderer has Node integration disabled, context isolation enabled, and sandboxing enabled. A single-instance lock prevents multiple managed backend processes; the app stops only a backend process it started itself. It never starts or stops PostgreSQL.
+Yui can be run in an Electron window or installed from a custom Windows setup app. The setup app is a separate frameless Electron UI; it launches the embedded NSIS package silently to perform extraction, registration, upgrades, and uninstall. Electron serves the production Angular files from a loopback-only local server and proxies `/api` to a Spring Boot process bound to `127.0.0.1`. The renderer has Node integration disabled, context isolation enabled, and sandboxing enabled. A single-instance lock prevents multiple managed backend processes; the app stops only a backend process it started itself. It never starts or stops PostgreSQL.
 
 #### Developer run
 
@@ -103,7 +103,7 @@ cd desktop
 npm run build:windows
 ```
 
-The script builds Angular and the Spring Boot JAR, creates a trimmed Java runtime from the build JDK, and runs electron-builder. The installer is written under `desktop\release\Yui Setup 1.0.0.exe`. The installed app includes its Java runtime, so end users do not need Java, Maven, Node.js, Angular CLI, or IntelliJ.
+The script builds Angular and the Spring Boot JAR, creates a trimmed Java runtime from the build JDK, packages the NSIS install engine, and then wraps it in the custom 16:9 `Yui Setup.exe` application. The final installer is written to `desktop\release\Yui Setup.exe`. Its progress indicator is intentionally indeterminate: silent NSIS does not expose reliable byte-level progress to the setup UI. The installed app includes its Java runtime, so end users do not need Java, Maven, Node.js, Angular CLI, or IntelliJ.
 
 #### PostgreSQL and local settings
 

@@ -54,5 +54,7 @@ Thumbs.db
 /.run/
 /desktop/node_modules/
 /desktop/release/
+/desktop/installer-release/
+/desktop/build/
 /desktop/resources/backend/
 /desktop/resources/runtime/

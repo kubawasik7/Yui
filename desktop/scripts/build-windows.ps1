@@ -90,11 +90,35 @@ if ($LASTEXITCODE -ne 0) { throw "jlink failed with exit code $LASTEXITCODE." }
 
 Invoke-CheckedCommand 'npx.cmd' @('electron-builder', '--win', 'nsis', '--x64') $desktopRoot
 
-$installer = Get-ChildItem (Join-Path $desktopRoot 'release') -Filter '*Setup*.exe' -File |
+$engine = Get-ChildItem (Join-Path $desktopRoot 'release') -Filter 'Yui Install Engine*.exe' -File |
     Sort-Object LastWriteTime -Descending |
     Select-Object -First 1
-if ($installer) {
-    Write-Host "Windows installer: $($installer.FullName)"
-} else {
-    throw 'electron-builder finished without producing a Windows installer.'
+if (-not $engine) { throw 'electron-builder did not produce the Yui installation engine.' }
+
+$payloadStage = Join-Path $desktopRoot 'build\installer-payload'
+New-Item -ItemType Directory -Force -Path $payloadStage | Out-Null
+Copy-Item -LiteralPath $engine.FullName -Destination (Join-Path $payloadStage 'Yui Install Engine.exe') -Force
+$unpackedApp = Join-Path $desktopRoot 'release\win-unpacked'
+if (-not (Test-Path $unpackedApp)) { throw 'The unpacked Yui app is missing; cannot calculate its real installed size.' }
+$installedBytes = [long](Get-ChildItem -LiteralPath $unpackedApp -File -Recurse | Measure-Object -Property Length -Sum).Sum
+$manifest = [ordered]@{
+    name = 'Yui'
+    version = (Get-Content (Join-Path $desktopRoot 'package.json') -Raw | ConvertFrom-Json).version
+    installedBytes = $installedBytes
+    builtAt = (Get-Date).ToUniversalTime().ToString('o')
 }
+$manifestJson = $manifest | ConvertTo-Json -Compress
+$utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText((Join-Path $payloadStage 'installer-manifest.json'), $manifestJson, $utf8WithoutBom)
+
+Invoke-CheckedCommand 'npx.cmd' @('electron-builder', '--config', 'installer-assets/electron-builder-installer.json', '--win', 'portable', '--x64') $desktopRoot
+$customInstaller = Get-ChildItem (Join-Path $desktopRoot 'installer-release') -Filter 'Yui Setup*.exe' -File |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+if (-not $customInstaller) { throw 'electron-builder finished without producing the custom Yui Setup app.' }
+$releaseRoot = Join-Path $desktopRoot 'release'
+New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
+$finalInstaller = Join-Path $releaseRoot 'Yui Setup.exe'
+Copy-Item -LiteralPath $customInstaller.FullName -Destination $finalInstaller -Force
+Write-Host "Custom Windows installer: $finalInstaller"
+Write-Host "Installer size: $([math]::Round((Get-Item -LiteralPath $finalInstaller).Length / 1GB, 2)) GB"

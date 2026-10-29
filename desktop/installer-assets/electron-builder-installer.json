@@ -1,0 +1,39 @@
+{
+  "appId": "com.yui.flashcards.setup",
+  "productName": "Yui Setup",
+  "asar": true,
+  "directories": {
+    "output": "installer-release"
+  },
+  "files": [
+    {
+      "from": "installer-ui",
+      "to": "installer-ui",
+      "filter": ["main.cjs", "preload.cjs", "renderer.js", "index.html", "styles.css"]
+    },
+    "package.json"
+  ],
+  "extraMetadata": {
+    "main": "installer-ui/main.cjs"
+  },
+  "extraResources": [
+    {
+      "from": "build/installer-payload/Yui Install Engine.exe",
+      "to": "payload/Yui Install Engine.exe"
+    },
+    {
+      "from": "build/installer-payload/installer-manifest.json",
+      "to": "payload/installer-manifest.json"
+    }
+  ],
+  "win": {
+    "icon": "icon.ico",
+    "target": [
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "artifactName": "Yui Setup.${ext}"
+  }
+}
