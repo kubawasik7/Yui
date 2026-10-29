@@ -4,7 +4,8 @@ const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 
 const PRODUCT = 'Yui';
-const INSTALL_ROOT = path.join(app.getPath('localAppData'), 'Programs', PRODUCT);
+const LOCAL_APP_DATA = process.env.LOCALAPPDATA || path.resolve(app.getPath('appData'), '..', 'Local');
+const INSTALL_ROOT = path.join(LOCAL_APP_DATA, 'Programs', PRODUCT);
 const PAYLOAD_ROOT = path.join(process.resourcesPath, 'payload');
 let windowRef;
 let installInProgress = false;

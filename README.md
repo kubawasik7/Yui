@@ -103,7 +103,7 @@ cd desktop
 npm run build:windows
 ```
 
-The script builds Angular and the Spring Boot JAR, creates a trimmed Java runtime from the build JDK, packages the NSIS install engine, and then wraps it in the custom 16:9 `Yui Setup.exe` application. The final installer is written to `desktop\release\Yui Setup.exe`. Its progress indicator is intentionally indeterminate: silent NSIS does not expose reliable byte-level progress to the setup UI. The installed app includes its Java runtime, so end users do not need Java, Maven, Node.js, Angular CLI, or IntelliJ.
+The script builds Angular and the Spring Boot JAR, creates a trimmed Java runtime from the build JDK, packages the NSIS install engine, and then wraps it in the custom 16:9 `Yui Setup.exe` application. The final installer is written to `desktop\release\Yui Setup <version>.exe`. Its progress indicator is intentionally indeterminate: silent NSIS does not expose reliable byte-level progress to the setup UI. The installed app includes its Java runtime, so end users do not need Java, Maven, Node.js, Angular CLI, or IntelliJ.
 
 #### PostgreSQL and local settings
 

@@ -107,6 +107,7 @@ $manifest = [ordered]@{
     installedBytes = $installedBytes
     builtAt = (Get-Date).ToUniversalTime().ToString('o')
 }
+$buildVersion = $manifest.version
 $manifestJson = $manifest | ConvertTo-Json -Compress
 $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText((Join-Path $payloadStage 'installer-manifest.json'), $manifestJson, $utf8WithoutBom)
@@ -118,7 +119,7 @@ $customInstaller = Get-ChildItem (Join-Path $desktopRoot 'installer-release') -F
 if (-not $customInstaller) { throw 'electron-builder finished without producing the custom Yui Setup app.' }
 $releaseRoot = Join-Path $desktopRoot 'release'
 New-Item -ItemType Directory -Force -Path $releaseRoot | Out-Null
-$finalInstaller = Join-Path $releaseRoot 'Yui Setup.exe'
+$finalInstaller = Join-Path $releaseRoot "Yui Setup $buildVersion.exe"
 Copy-Item -LiteralPath $customInstaller.FullName -Destination $finalInstaller -Force
 Write-Host "Custom Windows installer: $finalInstaller"
 Write-Host "Installer size: $([math]::Round((Get-Item -LiteralPath $finalInstaller).Length / 1GB, 2)) GB"
