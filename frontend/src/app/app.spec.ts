@@ -370,7 +370,9 @@ describe('App', () => {
     expect(studyTab?.querySelector('.nav-count')?.textContent?.trim()).toBe('0');
   });
 
-  it('shows two accessible answers and submits their binary mappings to the backend', () => {
+  it('shows two accessible answers, submits binary mappings, and restores a card when its FSRS due time arrives', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-23T10:00:00Z'));
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     const deck: Deck = {
@@ -429,6 +431,25 @@ describe('App', () => {
     expect(app.studyCards).toHaveLength(0);
     expect(app.reviewSaving).toBe(false);
     expect(app.pendingReview).toBeNull();
+    for (const request of httpTesting.match('/api/overview-stats')) {
+      request.flush({ ...emptyOverviewStats(), dueToday: 0 });
+    }
+    expect(app.dueReviewCount).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(61_200);
+    const refreshedDueCards = httpTesting.expectOne((request) =>
+      request.url === '/api/decks/deck-1/cards' && request.params.get('dueOnly') === 'true');
+    refreshedDueCards.flush([{
+      id: 'card-2', deckId: 'deck-1', front: 'forget', back: 'zapomnieć', example: null,
+      mnemonic: null, notes: null, fsrsActive: true, state: 'RELEARNING', stability: 1, difficulty: 4,
+      dueAt: '2026-10-23T10:01:00Z', lastReviewAt: '2026-10-23T10:00:00Z', reviewCount: 2, lapseCount: 1,
+      createdAt: '2026-10-23T09:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
+    }]);
+    httpTesting.expectOne('/api/decks/deck-1/cards/new').flush([]);
+    expect(app.currentStudyCard?.id).toBe('card-2');
+    expect(app.studyCards.filter((card) => card.id === 'card-2')).toHaveLength(1);
+    httpTesting.expectOne('/api/overview-stats').flush({ ...emptyOverviewStats(), dueToday: 1 });
+    expect(app.dueReviewCount).toBe(1);
   });
 
   it('moves skipped new cards to the end of the shared queue and activates only remembered cards', () => {
@@ -484,6 +505,42 @@ describe('App', () => {
     expect(app.currentStudyCard?.id).toBe('new-1');
     expect(app.studyCards.map((card) => card.id)).toEqual(['new-1']);
     httpTesting.expectNone((request) => request.url.includes('/reviews') || request.url.includes('/activate'));
+  });
+
+  it('keeps an active card and its pending failure rating when saving fails', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const deck: Deck = {
+      id: 'deck-1', name: 'Travel English', description: null, cardCount: 1, desiredRetention: 0.9,
+      createdAt: '2026-10-23T10:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
+    };
+    const card: Flashcard = {
+      id: 'card-1', deckId: deck.id, front: 'forget', back: 'zapomnieć', example: null,
+      mnemonic: null, notes: null, fsrsActive: true, state: 'REVIEW', stability: 5, difficulty: 4,
+      dueAt: '2026-10-23T10:00:00Z', lastReviewAt: '2026-10-22T10:00:00Z', reviewCount: 4, lapseCount: 1,
+      createdAt: '2026-10-20T10:00:00Z', updatedAt: '2026-10-22T10:00:00Z'
+    };
+    httpTesting.expectOne('/api/decks').flush([deck]);
+    fixture.componentInstance.startStudy(deck);
+    httpTesting.expectOne((request) => request.url === '/api/decks/deck-1/cards' && request.params.get('dueOnly') === 'true').flush([card]);
+    httpTesting.expectOne('/api/decks/deck-1/cards/new').flush([]);
+
+    const app = fixture.componentInstance;
+    app.studyFlipped = true;
+    app.rateStudyCard('NOT_REMEMBERED');
+    const firstAttempt = httpTesting.expectOne('/api/decks/deck-1/cards/card-1/reviews');
+    const submissionId = firstAttempt.request.body.submissionId;
+    firstAttempt.flush({ message: 'temporary failure' }, { status: 500, statusText: 'Server Error' });
+    expect(app.currentStudyCard?.id).toBe(card.id);
+    expect(app.reviewSaving).toBe(false);
+    expect(app.reviewError).not.toBe('');
+    expect(app.pendingReview?.answer).toBe('NOT_REMEMBERED');
+
+    app.retryStudyReview();
+    const retry = httpTesting.expectOne('/api/decks/deck-1/cards/card-1/reviews');
+    expect(retry.request.body).toEqual({ submissionId, answer: 'NOT_REMEMBERED' });
+    retry.flush({ submissionId, cardId: card.id, rating: 'AGAIN', reviewedAt: '2026-10-23T10:00:00Z', dueAt: '2026-10-23T10:10:00Z' });
+    expect(app.studyCards).toHaveLength(0);
   });
 
   it('uses Space to reveal and remember, and F to mark a revealed card not remembered', () => {

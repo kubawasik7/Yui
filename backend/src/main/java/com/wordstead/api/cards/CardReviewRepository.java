@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface CardReviewRepository extends JpaRepository<CardReview, UUID> {
     Optional<CardReview> findBySubmissionId(UUID submissionId);
 
+    long countByCard_Id(UUID cardId);
+
     boolean existsByCard_IdAndReviewedAtAndRating(UUID cardId, java.time.Instant reviewedAt, ReviewRating rating);
 
     List<CardReview> findByReviewedAtGreaterThanEqualAndReviewedAtLessThan(Instant from, Instant until);

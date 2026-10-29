@@ -331,8 +331,17 @@ class CardControllerTest {
         String repeatSubmissionId = UUID.randomUUID().toString();
         HttpResponse<String> immediateRepeat = request("POST", cardsPath + "/" + cardId + "/reviews",
                 "{\"submissionId\":\"" + repeatSubmissionId + "\",\"answer\":\"NOT_REMEMBERED\"}");
-        assertEquals(200, immediateRepeat.statusCode(), "A queued forgotten card may be reviewed before its FSRS due time");
-        assertTrue(immediateRepeat.body().contains("\"rating\":\"AGAIN\""));
+        assertEquals(409, immediateRepeat.statusCode(), "A forgotten card cannot be reviewed before its FSRS due time");
+        Flashcard stillActive = cardRepository.findById(cardId).orElseThrow();
+        assertTrue(stillActive.isFsrsActive());
+        assertEquals(2, stillActive.getReviewCount());
+        assertEquals(1, reviewRepository.countByCard_Id(cardId));
+
+        // Once its FSRS due time arrives, the same active card is returned by the normal due endpoint.
+        jdbcTemplate.update("UPDATE cards SET due_at = ? WHERE id = ?",
+                Timestamp.from(Instant.now().minusSeconds(1)), cardId);
+        HttpResponse<String> dueAgain = request("GET", cardsPath + "?dueOnly=true", null);
+        assertTrue(dueAgain.body().contains(cardId.toString()));
     }
 
     @Test
@@ -352,6 +361,13 @@ class CardControllerTest {
 
         String goodSubmissionId = UUID.randomUUID().toString();
         HttpResponse<String> good = request("POST", reviewPath,
+                "{\"submissionId\":\"" + goodSubmissionId + "\",\"answer\":\"REMEMBERED\"}");
+
+        assertEquals(409, good.statusCode(), "The learning card must wait until its FSRS step is due");
+        assertEquals(1, reviewRepository.count());
+        jdbcTemplate.update("UPDATE cards SET due_at = ? WHERE id = ?",
+                Timestamp.from(Instant.now().minusSeconds(1)), cardId);
+        good = request("POST", reviewPath,
                 "{\"submissionId\":\"" + goodSubmissionId + "\",\"answer\":\"REMEMBERED\"}");
 
         assertEquals(200, good.statusCode());

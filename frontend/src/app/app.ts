@@ -46,6 +46,8 @@ export class App implements OnInit, OnDestroy {
   studyDeckName = '';
   studyGlobal = false;
   private studyWaitingForDecks = false;
+  private studyDueRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly deferredStudyCards = new Map<string, string>();
   reviewSaving = false;
   reviewError = '';
   pendingReview: { cardId: string; submissionId: string; answer: ReviewAnswer } | null = null;
@@ -85,6 +87,8 @@ export class App implements OnInit, OnDestroy {
     this.cancelPendingSuggestion();
     for (const notification of this.notificationTimers.values()) clearTimeout(notification.timer);
     this.notificationTimers.clear();
+    if (this.studyDueRefreshTimer) clearTimeout(this.studyDueRefreshTimer);
+    this.deferredStudyCards.clear();
     this.overviewStatsRequestId++;
     for (const request of this.backgroundSuggestionRequests.values()) request.unsubscribe();
     this.backgroundSuggestionRequests.clear();
@@ -150,6 +154,9 @@ export class App implements OnInit, OnDestroy {
     this.studyWaitingForDecks = false;
     this.activeSection = 'decks';
     this.studyCards = [];
+    if (this.studyDueRefreshTimer) clearTimeout(this.studyDueRefreshTimer);
+    this.studyDueRefreshTimer = null;
+    this.deferredStudyCards.clear();
     this.studyIndex = 0;
     this.studyFlipped = false;
     this.reviewError = '';
@@ -222,10 +229,15 @@ export class App implements OnInit, OnDestroy {
       submissionId: pending.submissionId,
       answer: pending.answer
     }).subscribe({
-      next: () => {
+      next: (result) => {
         this.pendingReview = null;
         this.reviewSaving = false;
         this.studyCards = this.studyCards.filter((studyCard) => studyCard.id !== card.id);
+        const dueTimestamp = Date.parse(result.dueAt);
+        if (Number.isFinite(dueTimestamp) && dueTimestamp > Date.now()) {
+          this.deferredStudyCards.set(card.id, result.dueAt);
+          this.scheduleStudyDueRefresh();
+        }
         this.studyIndex = 0;
         this.studyFlipped = false;
         this.loadOverviewStats();
@@ -412,6 +424,9 @@ export class App implements OnInit, OnDestroy {
   }
 
   private loadStudyCards(): void {
+    if (this.studyDueRefreshTimer) clearTimeout(this.studyDueRefreshTimer);
+    this.studyDueRefreshTimer = null;
+    this.deferredStudyCards.clear();
     this.studyWaitingForDecks = false;
     this.studyCards = [];
     this.studyIndex = 0;
@@ -447,6 +462,51 @@ export class App implements OnInit, OnDestroy {
         this.activeSection = 'decks';
         this.studyGlobal = false;
         this.changeDetector.markForCheck();
+      }
+    });
+  }
+
+  private scheduleStudyDueRefresh(retryDelayMs?: number): void {
+    if (this.studyDueRefreshTimer) clearTimeout(this.studyDueRefreshTimer);
+    const nextDueAt = Math.min(...[...this.deferredStudyCards.values()].map((value) => Date.parse(value)));
+    if (!Number.isFinite(nextDueAt)) return;
+    const delay = retryDelayMs ?? Math.min(2_147_000_000, Math.max(0, nextDueAt - Date.now()) + 200);
+    this.studyDueRefreshTimer = setTimeout(() => {
+      this.studyDueRefreshTimer = null;
+      this.refreshStudyQueueAtDue();
+    }, delay);
+  }
+
+  private refreshStudyQueueAtDue(): void {
+    if (!this.studyMode) return;
+    const decks = this.studyGlobal ? this.decks : this.selectedDeck ? [this.selectedDeck] : [];
+    if (decks.length === 0) return;
+    const dueCardsRequest = this.studyGlobal
+      ? this.api.getDueCards()
+      : this.api.getCards(decks[0].id, '', true);
+    const newCardsRequest = this.studyGlobal
+      ? this.api.getNewCards()
+      : this.api.getNewCards(decks[0].id);
+    forkJoin({ dueCards: dueCardsRequest, newCards: newCardsRequest }).subscribe({
+      next: ({ dueCards, newCards }) => {
+        const now = Date.now();
+        const availableIds = new Set([...dueCards, ...newCards].map((card) => card.id));
+        let dueCardStillMissing = false;
+        for (const [cardId, dueAt] of this.deferredStudyCards) {
+          if (Date.parse(dueAt) <= now) {
+            if (availableIds.has(cardId)) this.deferredStudyCards.delete(cardId);
+            else dueCardStillMissing = true;
+          }
+        }
+        this.studyCards = [...new Map([...this.studyCards, ...dueCards, ...newCards]
+          .map((card) => [card.id, card])).values()];
+        this.loadOverviewStats();
+        this.changeDetector.markForCheck();
+        this.scheduleStudyDueRefresh(dueCardStillMissing ? 5000 : undefined);
+      },
+      error: () => {
+        // Keep the active session intact and retry shortly; the failed fetch must not lose a card.
+        this.scheduleStudyDueRefresh(5000);
       }
     });
   }

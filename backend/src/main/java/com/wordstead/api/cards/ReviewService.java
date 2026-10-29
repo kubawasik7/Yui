@@ -96,16 +96,16 @@ public class ReviewService {
         // building either response so a retry returns the same serialized review record.
         Instant reviewedAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
         FsrsState previousState = card.getFsrsState();
-        boolean queuedForgottenCard = card.getLastReviewAt() != null
+        boolean previousReviewWasAgain = card.getLastReviewAt() != null
                 && reviewRepository.existsByCard_IdAndReviewedAtAndRating(
                         cardId, card.getLastReviewAt(), ReviewRating.AGAIN);
-        if (!queuedForgottenCard && card.getLastReviewAt() != null && card.getDueAt().isAfter(reviewedAt)) {
+        if (card.getLastReviewAt() != null && card.getDueAt().isAfter(reviewedAt)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Card is not due for review yet");
         }
         boolean untouchedNewCard = previousState == FsrsState.LEARNING
                 && card.getStability() == null && card.getDifficulty() == null;
         boolean successfulRecoveryFromAgain = previousState == FsrsState.LEARNING
-                && queuedForgottenCard && rating == ReviewRating.GOOD;
+                && previousReviewWasAgain && rating == ReviewRating.GOOD;
         FsrsSchedule scheduled = scheduler.review(
                 previousState, card.getLearningStep(), card.getStability(), card.getDifficulty(),
                 card.getLastReviewAt(), rating, reviewedAt,
