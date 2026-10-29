@@ -57,6 +57,7 @@ export type ReviewAnswer = 'REMEMBERED' | 'NOT_REMEMBERED';
 export interface ReviewInput {
   submissionId: string;
   answer: ReviewAnswer;
+  studySessionId?: string;
 }
 
 export interface ReviewResult {

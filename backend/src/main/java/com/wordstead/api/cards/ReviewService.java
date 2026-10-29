@@ -78,14 +78,14 @@ public class ReviewService {
     public ReviewResponse review(UUID deckId, UUID cardId, ReviewRequest request) {
         ReviewRating rating = request.answer().toFsrsRating();
         CardReview alreadyRecorded = reviewRepository.findBySubmissionId(request.submissionId()).orElse(null);
-        if (alreadyRecorded != null) return idempotentResponse(alreadyRecorded, cardId, rating);
+        if (alreadyRecorded != null) return idempotentResponse(alreadyRecorded, cardId, request, rating);
 
         Flashcard card = cardRepository.findByIdAndDeckIdForUpdate(cardId, deckId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Card not found"));
 
         // Re-check under the card lock so a retry waiting on a concurrent request observes its commit.
         alreadyRecorded = reviewRepository.findBySubmissionId(request.submissionId()).orElse(null);
-        if (alreadyRecorded != null) return idempotentResponse(alreadyRecorded, cardId, rating);
+        if (alreadyRecorded != null) return idempotentResponse(alreadyRecorded, cardId, request, rating);
 
         if (!card.isFsrsActive()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -99,7 +99,12 @@ public class ReviewService {
         boolean previousReviewWasAgain = card.getLastReviewAt() != null
                 && reviewRepository.existsByCard_IdAndReviewedAtAndRating(
                         cardId, card.getLastReviewAt(), ReviewRating.AGAIN);
-        if (card.getLastReviewAt() != null && card.getDueAt().isAfter(reviewedAt)) {
+        boolean retryAfterAgainInSameSession = request.studySessionId() != null
+                && card.getLastReviewAt() != null
+                && reviewRepository.existsByCard_IdAndReviewedAtAndRatingAndStudySessionId(
+                        cardId, card.getLastReviewAt(), ReviewRating.AGAIN, request.studySessionId());
+        if (card.getLastReviewAt() != null && card.getDueAt().isAfter(reviewedAt)
+                && !retryAfterAgainInSameSession) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Card is not due for review yet");
         }
         boolean untouchedNewCard = previousState == FsrsState.LEARNING
@@ -117,7 +122,8 @@ public class ReviewService {
         boolean lapse = previousState == FsrsState.REVIEW && rating == ReviewRating.AGAIN;
         card.applySchedule(scheduled.state(), scheduled.step(), scheduled.stability(), scheduled.difficulty(),
                 scheduled.dueAt(), reviewedAt, lapse);
-        CardReview review = new CardReview(request.submissionId(), card, rating, reviewedAt, scheduled.dueAt());
+        CardReview review = new CardReview(request.submissionId(), card, rating, reviewedAt,
+                scheduled.dueAt(), request.studySessionId());
         cardRepository.save(card);
         return ReviewResponse.from(reviewRepository.save(review));
     }
@@ -139,12 +145,16 @@ public class ReviewService {
                 dueDatePolicy.startOfScheduledDay(schedule.dueAt()), schedule.lastReviewAt());
     }
 
-    private ReviewResponse idempotentResponse(CardReview existing, UUID requestedCardId, ReviewRating requestedRating) {
+    private ReviewResponse idempotentResponse(CardReview existing, UUID requestedCardId,
+                                               ReviewRequest request, ReviewRating requestedRating) {
         if (!existing.getCard().getId().equals(requestedCardId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Submission ID was already used for another card");
         }
         if (existing.getRating() != requestedRating) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Submission ID was already used with another rating");
+        }
+        if (!java.util.Objects.equals(existing.getStudySessionId(), request.studySessionId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Submission ID was already used in another study session");
         }
         return ReviewResponse.from(existing);
     }

@@ -6,5 +6,6 @@ import jakarta.validation.constraints.NotNull;
 
 public record ReviewRequest(
         @NotNull UUID submissionId,
-        @NotNull ReviewAnswer answer) {
+        @NotNull ReviewAnswer answer,
+        UUID studySessionId) {
 }

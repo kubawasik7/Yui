@@ -46,11 +46,14 @@ export class App implements OnInit, OnDestroy {
   studyDeckName = '';
   studyGlobal = false;
   private studyWaitingForDecks = false;
+  private studySessionId = '';
+  private readonly studyRetryCardIds = new Set<string>();
+  private readonly completedStudyCardIds = new Set<string>();
   private studyDueRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly deferredStudyCards = new Map<string, string>();
   reviewSaving = false;
   reviewError = '';
-  pendingReview: { cardId: string; submissionId: string; answer: ReviewAnswer } | null = null;
+  pendingReview: { cardId: string; submissionId: string; answer: ReviewAnswer; studySessionId: string } | null = null;
 
   deckFormOpen = false;
   editingDeckId: string | null = null;
@@ -132,12 +135,19 @@ export class App implements OnInit, OnDestroy {
     this.notificationTimers.delete(key);
   }
 
+  private beginStudySession(): void {
+    this.studySessionId = crypto.randomUUID();
+    this.studyRetryCardIds.clear();
+    this.completedStudyCardIds.clear();
+  }
+
   get currentStudyCard(): Flashcard | null {
     return this.studyCards[this.studyIndex] ?? null;
   }
 
   startStudy(deck: Deck, event?: Event): void {
     event?.stopPropagation();
+    this.beginStudySession();
     this.studyGlobal = false;
     this.selectedDeck = deck;
     this.activeSection = 'study';
@@ -154,6 +164,9 @@ export class App implements OnInit, OnDestroy {
     this.studyWaitingForDecks = false;
     this.activeSection = 'decks';
     this.studyCards = [];
+    this.studySessionId = '';
+    this.studyRetryCardIds.clear();
+    this.completedStudyCardIds.clear();
     if (this.studyDueRefreshTimer) clearTimeout(this.studyDueRefreshTimer);
     this.studyDueRefreshTimer = null;
     this.deferredStudyCards.clear();
@@ -199,8 +212,12 @@ export class App implements OnInit, OnDestroy {
       }
 
       this.reviewSaving = true;
+      const activationSessionId = this.studySessionId;
       this.api.activateCard(card.deckId, card.id).subscribe({
         next: () => {
+          if (this.studySessionId !== activationSessionId || !this.studyMode) return;
+          this.completedStudyCardIds.add(card.id);
+          this.studyRetryCardIds.delete(card.id);
           this.studyCards = this.studyCards.filter((studyCard) => studyCard.id !== card.id);
           this.studyIndex = 0;
           this.studyFlipped = false;
@@ -218,32 +235,49 @@ export class App implements OnInit, OnDestroy {
     }
 
     if (!this.pendingReview) {
-      this.pendingReview = { cardId: card.id, submissionId: crypto.randomUUID(), answer };
+      this.pendingReview = {
+        cardId: card.id,
+        submissionId: crypto.randomUUID(),
+        answer,
+        studySessionId: this.studySessionId
+      };
     }
-    if (this.pendingReview.cardId !== card.id) return;
+    if (this.pendingReview.cardId !== card.id || this.pendingReview.studySessionId !== this.studySessionId) return;
 
     const pending = this.pendingReview;
     this.reviewSaving = true;
     this.reviewError = '';
     this.api.submitReview(card.deckId, card.id, {
       submissionId: pending.submissionId,
-      answer: pending.answer
+      answer: pending.answer,
+      studySessionId: pending.studySessionId
     }).subscribe({
       next: (result) => {
+        if (this.studySessionId !== pending.studySessionId || !this.studyMode) return;
         this.pendingReview = null;
         this.reviewSaving = false;
         this.studyCards = this.studyCards.filter((studyCard) => studyCard.id !== card.id);
         const dueTimestamp = Date.parse(result.dueAt);
         if (Number.isFinite(dueTimestamp) && dueTimestamp > Date.now()) {
           this.deferredStudyCards.set(card.id, result.dueAt);
-          this.scheduleStudyDueRefresh();
+        } else {
+          this.deferredStudyCards.delete(card.id);
         }
+        if (pending.answer === 'NOT_REMEMBERED') {
+          this.studyRetryCardIds.add(card.id);
+          this.studyCards.push({ ...card, dueAt: result.dueAt, lastReviewAt: result.reviewedAt });
+        } else {
+          this.studyRetryCardIds.delete(card.id);
+          this.completedStudyCardIds.add(card.id);
+        }
+        this.scheduleStudyDueRefresh();
         this.studyIndex = 0;
         this.studyFlipped = false;
         this.loadOverviewStats();
         this.changeDetector.markForCheck();
       },
       error: (error: unknown) => {
+        if (this.studySessionId !== pending.studySessionId) return;
         this.reviewSaving = false;
         this.reviewError = this.errorMessage(error, 'Your review could not be saved. Retry to safely submit it.');
         this.changeDetector.markForCheck();
@@ -403,6 +437,7 @@ export class App implements OnInit, OnDestroy {
 
   startStudyAllCards(): void {
     this.endStudy(false);
+    this.beginStudySession();
     this.studyGlobal = true;
     this.activeSection = 'study';
     this.studyMode = true;
@@ -498,7 +533,10 @@ export class App implements OnInit, OnDestroy {
             else dueCardStillMissing = true;
           }
         }
-        this.studyCards = [...new Map([...this.studyCards, ...dueCards, ...newCards]
+        const sessionCards = this.studyCards.filter((card) => !this.completedStudyCardIds.has(card.id));
+        const fetchedCards = [...dueCards, ...newCards].filter((card) =>
+          !this.studyRetryCardIds.has(card.id) && !this.completedStudyCardIds.has(card.id));
+        this.studyCards = [...new Map([...sessionCards, ...fetchedCards]
           .map((card) => [card.id, card])).values()];
         this.loadOverviewStats();
         this.changeDetector.markForCheck();

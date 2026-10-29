@@ -306,10 +306,12 @@ class CardControllerTest {
         card.applySchedule(FsrsState.REVIEW, null, 2.3065, 2.1181,
                 previousReview, previousReview, false);
         cardRepository.saveAndFlush(card);
+        String studySessionId = UUID.randomUUID().toString();
         String submissionId = UUID.randomUUID().toString();
 
         HttpResponse<String> response = request("POST", cardsPath + "/" + cardId + "/reviews",
-                "{\"submissionId\":\"" + submissionId + "\",\"answer\":\"NOT_REMEMBERED\"}");
+                "{\"submissionId\":\"" + submissionId + "\",\"answer\":\"NOT_REMEMBERED\",\"studySessionId\":\""
+                        + studySessionId + "\"}");
 
         assertEquals(200, response.statusCode());
         assertTrue(response.body().contains("\"rating\":\"AGAIN\""));
@@ -332,10 +334,51 @@ class CardControllerTest {
         HttpResponse<String> immediateRepeat = request("POST", cardsPath + "/" + cardId + "/reviews",
                 "{\"submissionId\":\"" + repeatSubmissionId + "\",\"answer\":\"NOT_REMEMBERED\"}");
         assertEquals(409, immediateRepeat.statusCode(), "A forgotten card cannot be reviewed before its FSRS due time");
+
+        HttpResponse<String> foreignSessionRepeat = request("POST", cardsPath + "/" + cardId + "/reviews",
+                "{\"submissionId\":\"" + repeatSubmissionId + "\",\"answer\":\"NOT_REMEMBERED\",\"studySessionId\":\""
+                        + UUID.randomUUID() + "\"}");
+        assertEquals(409, foreignSessionRepeat.statusCode(), "A different session cannot bypass the due time");
+
+        HttpResponse<String> sessionRepeat = request("POST", cardsPath + "/" + cardId + "/reviews",
+                "{\"submissionId\":\"" + repeatSubmissionId + "\",\"answer\":\"NOT_REMEMBERED\",\"studySessionId\":\""
+                        + studySessionId + "\"}");
+        assertEquals(200, sessionRepeat.statusCode(), "An explicit retry is allowed only in the session that failed it");
+        assertTrue(sessionRepeat.body().contains("\"rating\":\"AGAIN\""));
+        Instant secondReviewAt = extractInstant(sessionRepeat.body(), "reviewedAt");
+        Instant secondDueAt = extractInstant(sessionRepeat.body(), "dueAt");
+        assertEquals(Duration.ofMinutes(10), Duration.between(secondReviewAt, secondDueAt));
+        assertEquals(ReviewRating.AGAIN, reviewRepository.findBySubmissionId(UUID.fromString(repeatSubmissionId))
+                .orElseThrow().getRating());
+
+        // A transport retry with the same submission ID returns the stored result without another FSRS update.
+        HttpResponse<String> duplicateSessionRepeat = request("POST", cardsPath + "/" + cardId + "/reviews",
+                "{\"submissionId\":\"" + repeatSubmissionId + "\",\"answer\":\"NOT_REMEMBERED\",\"studySessionId\":\""
+                        + studySessionId + "\"}");
+        assertEquals(200, duplicateSessionRepeat.statusCode());
+        assertEquals(2, reviewRepository.countByCard_Id(cardId));
+
+        String thirdSubmissionId = UUID.randomUUID().toString();
+        HttpResponse<String> thirdAgain = request("POST", cardsPath + "/" + cardId + "/reviews",
+                "{\"submissionId\":\"" + thirdSubmissionId + "\",\"answer\":\"NOT_REMEMBERED\",\"studySessionId\":\""
+                        + studySessionId + "\"}");
+        assertEquals(200, thirdAgain.statusCode());
+        assertEquals(ReviewRating.AGAIN, reviewRepository.findBySubmissionId(UUID.fromString(thirdSubmissionId))
+                .orElseThrow().getRating());
+        assertEquals(3, reviewRepository.countByCard_Id(cardId));
+
+        String rememberedSubmissionId = UUID.randomUUID().toString();
+        HttpResponse<String> remembered = request("POST", cardsPath + "/" + cardId + "/reviews",
+                "{\"submissionId\":\"" + rememberedSubmissionId + "\",\"answer\":\"REMEMBERED\",\"studySessionId\":\""
+                        + studySessionId + "\"}");
+        assertEquals(200, remembered.statusCode(), "A remembered answer ends the same-session retry cycle");
+        assertEquals(ReviewRating.GOOD, reviewRepository.findBySubmissionId(UUID.fromString(rememberedSubmissionId))
+                .orElseThrow().getRating());
+        assertEquals(4, reviewRepository.countByCard_Id(cardId));
+
         Flashcard stillActive = cardRepository.findById(cardId).orElseThrow();
         assertTrue(stillActive.isFsrsActive());
-        assertEquals(2, stillActive.getReviewCount());
-        assertEquals(1, reviewRepository.countByCard_Id(cardId));
+        assertEquals(5, stillActive.getReviewCount());
 
         // Once its FSRS due time arrives, the same active card is returned by the normal due endpoint.
         jdbcTemplate.update("UPDATE cards SET due_at = ? WHERE id = ?",

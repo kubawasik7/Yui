@@ -35,15 +35,24 @@ public class CardReview {
     @Column(name = "due_at", nullable = false)
     private Instant dueAt;
 
+    @Column(name = "study_session_id")
+    private UUID studySessionId;
+
     protected CardReview() {
     }
 
     public CardReview(UUID submissionId, Flashcard card, ReviewRating rating, Instant reviewedAt, Instant dueAt) {
+        this(submissionId, card, rating, reviewedAt, dueAt, null);
+    }
+
+    public CardReview(UUID submissionId, Flashcard card, ReviewRating rating, Instant reviewedAt, Instant dueAt,
+                      UUID studySessionId) {
         this.submissionId = submissionId;
         this.card = card;
         this.rating = rating;
         this.reviewedAt = reviewedAt;
         this.dueAt = dueAt;
+        this.studySessionId = studySessionId;
     }
 
     public UUID getSubmissionId() { return submissionId; }
@@ -51,4 +60,5 @@ public class CardReview {
     public ReviewRating getRating() { return rating; }
     public Instant getReviewedAt() { return reviewedAt; }
     public Instant getDueAt() { return dueAt; }
+    public UUID getStudySessionId() { return studySessionId; }
 }

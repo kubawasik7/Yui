@@ -14,5 +14,8 @@ public interface CardReviewRepository extends JpaRepository<CardReview, UUID> {
 
     boolean existsByCard_IdAndReviewedAtAndRating(UUID cardId, java.time.Instant reviewedAt, ReviewRating rating);
 
+    boolean existsByCard_IdAndReviewedAtAndRatingAndStudySessionId(
+            UUID cardId, Instant reviewedAt, ReviewRating rating, UUID studySessionId);
+
     List<CardReview> findByReviewedAtGreaterThanEqualAndReviewedAtLessThan(Instant from, Instant until);
 }

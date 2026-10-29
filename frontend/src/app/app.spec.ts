@@ -370,7 +370,7 @@ describe('App', () => {
     expect(studyTab?.querySelector('.nav-count')?.textContent?.trim()).toBe('0');
   });
 
-  it('shows two accessible answers, submits binary mappings, and restores a card when its FSRS due time arrives', async () => {
+  it('retries active failures in the same Study session until Remembered without inflating the due count', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-23T10:00:00Z'));
     const fixture = TestBed.createComponent(App);
@@ -413,6 +413,8 @@ describe('App', () => {
     expect(reviewRequest.request.method).toBe('POST');
     expect(reviewRequest.request.body.answer).toBe('REMEMBERED');
     expect(reviewRequest.request.body.submissionId).toBe(app.pendingReview?.submissionId);
+    const studySessionId = app.pendingReview!.studySessionId;
+    expect(reviewRequest.request.body.studySessionId).toBe(studySessionId);
     reviewRequest.flush({
       submissionId: app.pendingReview!.submissionId, cardId: 'card-1', rating: 'GOOD',
       reviewedAt: '2026-10-23T10:00:00Z', dueAt: '2026-10-23T10:10:00Z'
@@ -428,26 +430,49 @@ describe('App', () => {
       submissionId: app.pendingReview!.submissionId, cardId: 'card-2', rating: 'AGAIN',
       reviewedAt: '2026-10-23T10:00:00Z', dueAt: '2026-10-23T10:01:00Z'
     });
-    expect(app.studyCards).toHaveLength(0);
+    expect(app.studyCards).toHaveLength(1);
+    expect(app.currentStudyCard?.id).toBe('card-2');
     expect(app.reviewSaving).toBe(false);
     expect(app.pendingReview).toBeNull();
+
+    app.studyFlipped = true;
+    app.rateStudyCard('NOT_REMEMBERED');
+    const secondLapseRequest = httpTesting.expectOne('/api/decks/deck-1/cards/card-2/reviews');
+    expect(secondLapseRequest.request.body.studySessionId).toBe(studySessionId);
+    expect(secondLapseRequest.request.body.submissionId).not.toBe(lapseRequest.request.body.submissionId);
+    secondLapseRequest.flush({
+      submissionId: app.pendingReview!.submissionId, cardId: 'card-2', rating: 'AGAIN',
+      reviewedAt: '2026-10-23T10:01:00Z', dueAt: '2026-10-23T10:02:00Z'
+    });
+    expect(app.studyCards).toHaveLength(1);
+    httpTesting.expectNone((request) => request.url.endsWith('/reviews'));
+
+    app.studyFlipped = true;
+    app.rateStudyCard('REMEMBERED');
+    const rememberedRequest = httpTesting.expectOne('/api/decks/deck-1/cards/card-2/reviews');
+    expect(rememberedRequest.request.body.studySessionId).toBe(studySessionId);
+    rememberedRequest.flush({
+      submissionId: app.pendingReview!.submissionId, cardId: 'card-2', rating: 'GOOD',
+      reviewedAt: '2026-10-23T10:02:00Z', dueAt: '2026-10-24T00:00:00Z'
+    });
+    expect(app.studyCards).toHaveLength(0);
     for (const request of httpTesting.match('/api/overview-stats')) {
       request.flush({ ...emptyOverviewStats(), dueToday: 0 });
     }
     expect(app.dueReviewCount).toBe(0);
 
-    await vi.advanceTimersByTimeAsync(61_200);
+    await vi.advanceTimersByTimeAsync(10 * 60_000 + 200);
     const refreshedDueCards = httpTesting.expectOne((request) =>
       request.url === '/api/decks/deck-1/cards' && request.params.get('dueOnly') === 'true');
     refreshedDueCards.flush([{
-      id: 'card-2', deckId: 'deck-1', front: 'forget', back: 'zapomnieć', example: null,
+      id: 'card-1', deckId: 'deck-1', front: 'to board', back: 'wsiadać', example: null,
       mnemonic: null, notes: null, fsrsActive: true, state: 'RELEARNING', stability: 1, difficulty: 4,
-      dueAt: '2026-10-23T10:01:00Z', lastReviewAt: '2026-10-23T10:00:00Z', reviewCount: 2, lapseCount: 1,
+      dueAt: '2026-10-23T10:10:00Z', lastReviewAt: '2026-10-23T10:00:00Z', reviewCount: 1, lapseCount: 0,
       createdAt: '2026-10-23T09:00:00Z', updatedAt: '2026-10-23T10:00:00Z'
     }]);
     httpTesting.expectOne('/api/decks/deck-1/cards/new').flush([]);
-    expect(app.currentStudyCard?.id).toBe('card-2');
-    expect(app.studyCards.filter((card) => card.id === 'card-2')).toHaveLength(1);
+    expect(app.studyCards).toHaveLength(0);
+    httpTesting.expectNone((request) => request.url.endsWith('/reviews'));
     httpTesting.expectOne('/api/overview-stats').flush({ ...emptyOverviewStats(), dueToday: 1 });
     expect(app.dueReviewCount).toBe(1);
   });
@@ -538,9 +563,12 @@ describe('App', () => {
 
     app.retryStudyReview();
     const retry = httpTesting.expectOne('/api/decks/deck-1/cards/card-1/reviews');
-    expect(retry.request.body).toEqual({ submissionId, answer: 'NOT_REMEMBERED' });
+    expect(retry.request.body).toEqual({
+      submissionId, answer: 'NOT_REMEMBERED', studySessionId: app.pendingReview!.studySessionId
+    });
     retry.flush({ submissionId, cardId: card.id, rating: 'AGAIN', reviewedAt: '2026-10-23T10:00:00Z', dueAt: '2026-10-23T10:10:00Z' });
-    expect(app.studyCards).toHaveLength(0);
+    expect(app.studyCards).toHaveLength(1);
+    expect(app.currentStudyCard?.id).toBe(card.id);
   });
 
   it('uses Space to reveal and remember, and F to mark a revealed card not remembered', () => {
@@ -592,7 +620,8 @@ describe('App', () => {
       submissionId: app.pendingReview!.submissionId, cardId: secondCard.id, rating: 'AGAIN',
       reviewedAt: '2026-10-23T10:00:00Z', dueAt: '2026-10-23T10:01:00Z'
     });
-    expect(app.studyCards).toHaveLength(0);
+    expect(app.studyCards).toHaveLength(1);
+    expect(app.currentStudyCard?.id).toBe('card-2');
     expect(app.reviewSaving).toBe(false);
   });
 });
